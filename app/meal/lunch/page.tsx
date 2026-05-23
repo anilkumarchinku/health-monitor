@@ -304,12 +304,15 @@ export default function LunchMealPage() {
 
         <canvas ref={canvasRef} className="hidden" />
 
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-4 pb-8 pt-20">
-          <div className="mx-auto flex max-w-sm items-center justify-center gap-4">
+        <div
+          className="fixed inset-x-0 z-20 bg-gradient-to-t from-black via-black/75 to-transparent px-4 pb-6 pt-16"
+          style={{ bottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          <div className="mx-auto grid max-w-sm grid-cols-[56px_1fr_56px] items-center gap-4">
             <Button
               variant="outline"
               size="icon"
-              className="h-12 w-12 border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              className="h-12 w-12 border-white/40 bg-black/35 text-white backdrop-blur hover:bg-white/20 hover:text-white"
               onClick={() => {
                 stopCamera();
                 setCameraState("idle");
@@ -320,13 +323,15 @@ export default function LunchMealPage() {
               <ArrowLeft />
             </Button>
             <Button
-              className="h-16 w-16 rounded-full border-4 border-white bg-white text-black shadow-soft hover:bg-white/90"
+              className="mx-auto h-16 min-w-36 rounded-full border-4 border-white bg-white px-6 text-base font-semibold text-black shadow-soft hover:bg-white/90 disabled:opacity-60"
               onClick={captureImage}
               disabled={cameraState !== "active"}
               title="Capture meal"
             >
               <Camera className="h-7 w-7" />
+              Capture
             </Button>
+            <div aria-hidden />
           </div>
         </div>
       </main>
