@@ -11,6 +11,7 @@ type HealthSnapshotRow = {
     lunchTime?: string;
     dinnerTime?: string;
     sleepReminder?: string;
+    timezone?: string;
   } | null;
   meals:
     | {
@@ -32,6 +33,7 @@ type ReminderKind = MealType | "sleep";
 type DueReminder = {
   kind: ReminderKind;
   time: string;
+  localDate: string;
   title: string;
   body: string;
   url: string;
@@ -61,13 +63,13 @@ export async function GET(request: Request) {
   webpush.setVapidDetails("mailto:hello@daily-health-companion.local", vapidPublicKey, vapidPrivateKey);
 
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const earliestDate = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const { data: snapshots, error: snapshotError } = await supabase
     .from("health_snapshots")
     .select("user_id, profile, meals")
     .not("user_id", "is", null)
-    .eq("date", today);
+    .gte("date", earliestDate);
 
   if (snapshotError) {
     return NextResponse.json({ error: snapshotError.message }, { status: 500 });
@@ -92,7 +94,12 @@ export async function GET(request: Request) {
       .eq("user_id", snapshot.user_id);
 
     for (const reminder of reminders) {
-      const shouldSend = await reserveReminder(supabase, snapshot.user_id, today, reminder.kind);
+      const shouldSend = await reserveReminder(
+        supabase,
+        snapshot.user_id,
+        reminder.localDate,
+        reminder.kind,
+      );
       if (!shouldSend) continue;
 
       await Promise.all(
@@ -104,7 +111,7 @@ export async function GET(request: Request) {
                 title: reminder.title,
                 body: reminder.body,
                 url: reminder.url,
-                tag: `${today}-${reminder.kind}-reminder`,
+                tag: `${reminder.localDate}-${reminder.kind}-reminder`,
               }),
             );
             sent += 1;
@@ -121,6 +128,7 @@ export async function GET(request: Request) {
 
 function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] {
   const profile = snapshot.profile ?? {};
+  const localNow = getLocalDateParts(now, profile.timezone || "UTC");
   const mealTime = (type: MealType) =>
     snapshot.meals?.find((meal) => meal.type === type)?.plannedTime ??
     profile[`${type}Time` as keyof typeof profile];
@@ -129,6 +137,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "breakfast",
       time: mealTime("breakfast") ?? "",
+      localDate: localNow.date,
       title: "Is this your breakfast time?",
       body: "Tap to log breakfast and your water from morning.",
       url: "/",
@@ -136,6 +145,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "lunch",
       time: mealTime("lunch") ?? "",
+      localDate: localNow.date,
       title: "Is this your lunch time?",
       body: "Tap to capture your lunch and check in.",
       url: "/meal/lunch",
@@ -143,6 +153,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "dinner",
       time: mealTime("dinner") ?? "",
+      localDate: localNow.date,
       title: "Is this your dinner time?",
       body: "Tap to log dinner and finish strong.",
       url: "/",
@@ -150,24 +161,45 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "sleep",
       time: profile.sleepReminder ?? "",
+      localDate: localNow.date,
       title: "Sleep check-in",
       body: "Tap to enter when you slept and protect tomorrow's energy.",
       url: "/",
     },
   ];
 
-  return candidates.filter((reminder) => isWithinCronWindow(reminder.time, now));
+  return candidates.filter((reminder) => isWithinCronWindow(reminder.time, localNow.minutes));
 }
 
-function isWithinCronWindow(time: string, now: Date) {
+function isWithinCronWindow(time: string, currentLocalMinutes: number) {
   if (!/^\d{2}:\d{2}$/.test(time)) return false;
 
   const [hour, minute] = time.split(":").map(Number);
-  const target = new Date(now);
-  target.setHours(hour, minute, 0, 0);
+  const targetMinutes = hour * 60 + minute;
+  const diff = currentLocalMinutes - targetMinutes;
 
-  const diff = now.getTime() - target.getTime();
-  return diff >= 0 && diff < 5 * 60 * 1000;
+  return diff >= 0 && diff < 5;
+}
+
+function getLocalDateParts(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  const hour = Number(value("hour"));
+  const minute = Number(value("minute"));
+
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    minutes: hour * 60 + minute,
+  };
 }
 
 async function reserveReminder(

@@ -36,6 +36,7 @@ type Profile = {
   dinnerTime: string;
   sleepReminder: string;
   waterGoal: number;
+  timezone: string;
 };
 
 type MealLog = {
@@ -69,6 +70,7 @@ const defaultProfile: Profile = {
   dinnerTime: "20:00",
   sleepReminder: "22:30",
   waterGoal: 2500,
+  timezone: "Asia/Kolkata",
 };
 
 const mealLabels: Record<MealType, string> = {
@@ -259,6 +261,17 @@ export default function ProfilePage() {
                       updateProfile("waterGoal", Number(event.target.value))
                     }
                   />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="profile-timezone">Timezone</Label>
+                  <Input
+                    id="profile-timezone"
+                    value={profile.timezone}
+                    onChange={(event) => updateProfile("timezone", event.target.value)}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Used for exact meal and sleep reminders in each user&apos;s country.
+                  </p>
                 </div>
               </div>
 

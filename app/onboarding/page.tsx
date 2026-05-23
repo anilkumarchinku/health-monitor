@@ -39,6 +39,7 @@ type Profile = {
   sleepReminder: string;
   waterGoal: number;
   primaryGoal: string;
+  timezone: string;
 };
 
 type MealLog = {
@@ -62,6 +63,7 @@ const defaultProfile: Profile = {
   sleepReminder: "22:30",
   waterGoal: 2500,
   primaryGoal: "More energy",
+  timezone: "Asia/Kolkata",
 };
 
 const goals = ["More energy", "Better sleep", "Balanced meals", "More discipline"];
@@ -96,6 +98,10 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     void requireSignedInUser();
+    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (detectedTimezone) {
+      updateProfile("timezone", detectedTimezone);
+    }
   }, []);
 
   const progress = Math.round(((step + 1) / 4) * 100);
@@ -315,6 +321,17 @@ export default function OnboardingPage() {
                     value={profile.dinnerTime}
                     onChange={(value) => updateProfile("dinnerTime", value)}
                   />
+                  <div className="space-y-2 sm:col-span-3">
+                    <Label htmlFor="timezone">Timezone</Label>
+                    <Input
+                      id="timezone"
+                      value={profile.timezone}
+                      onChange={(event) => updateProfile("timezone", event.target.value)}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Meal reminders use this timezone, so lunch at 1:00 PM means your local 1:00 PM.
+                    </p>
+                  </div>
                 </CardContent>
               </>
             )}

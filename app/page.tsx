@@ -62,6 +62,7 @@ type Profile = {
   dinnerTime: string;
   sleepReminder: string;
   waterGoal: number;
+  timezone: string;
 };
 
 type MealLog = {
@@ -92,6 +93,7 @@ const defaultProfile: Profile = {
   dinnerTime: "20:00",
   sleepReminder: "22:30",
   waterGoal: 2500,
+  timezone: "Asia/Kolkata",
 };
 
 const quotes = [
@@ -1064,6 +1066,14 @@ export default function HomePage() {
                       updateProfile("dinnerTime", value);
                       updateMeal("dinner", { plannedTime: value });
                     }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dashboard-timezone">Timezone</Label>
+                  <Input
+                    id="dashboard-timezone"
+                    value={profile.timezone}
+                    onChange={(event) => updateProfile("timezone", event.target.value)}
                   />
                 </div>
                 <Separator />
