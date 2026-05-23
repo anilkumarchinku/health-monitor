@@ -446,6 +446,18 @@ export default function HomePage() {
             )}
           </div>
 
+          <MorningBoostCard
+            expanded={expandedSections.morningBoost}
+            quote={quote}
+            quoteFeedback={quoteFeedback}
+            onToggle={() => toggleSection("morningBoost")}
+            onFeedback={setQuoteFeedback}
+            onNext={() => {
+              setQuoteIndex((current) => (current + 1) % quotes.length);
+              setQuoteFeedback(null);
+            }}
+          />
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               icon={<Clock className="h-4 w-4" />}
@@ -475,79 +487,6 @@ export default function HomePage() {
 
       <div className="glass-shell mx-auto mt-5 grid w-full max-w-7xl gap-5 rounded-lg p-3 sm:p-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-5">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Sun className="h-5 w-5 text-amber-600" />
-                    Morning boost
-                  </CardTitle>
-                  <CardDescription>
-                    A confidence note to start the day with steadiness.
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Quote review pending</Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-expanded={expandedSections.morningBoost}
-                    title={expandedSections.morningBoost ? "Collapse" : "Expand"}
-                    onClick={() => toggleSection("morningBoost")}
-                  >
-                    <ChevronDown
-                      className={`transition-transform ${
-                        expandedSections.morningBoost ? "rotate-180" : ""
-                      }`}
-                    />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            {expandedSections.morningBoost && (
-              <CardContent className="space-y-4">
-                <blockquote className="border-l-4 border-primary pl-4 text-lg font-medium leading-8">
-                  {quote.text}
-                </blockquote>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-muted-foreground">{quote.author}</p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={quoteFeedback === "liked" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setQuoteFeedback("liked")}
-                      title="Like quote"
-                    >
-                      <ThumbsUp />
-                      Like
-                    </Button>
-                    <Button
-                      variant={quoteFeedback === "disliked" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setQuoteFeedback("disliked")}
-                      title="Dislike quote"
-                    >
-                      <ThumbsDown />
-                      Dislike
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setQuoteIndex((current) => (current + 1) % quotes.length);
-                        setQuoteFeedback(null);
-                      }}
-                    >
-                      <Sparkles />
-                      Another
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
@@ -1152,6 +1091,86 @@ function MetricCard({
       </div>
       <p className="mt-2 text-lg font-semibold">{value}</p>
     </div>
+  );
+}
+
+function MorningBoostCard({
+  expanded,
+  quote,
+  quoteFeedback,
+  onToggle,
+  onFeedback,
+  onNext,
+}: {
+  expanded: boolean;
+  quote: (typeof quotes)[number];
+  quoteFeedback: QuoteFeedback;
+  onToggle: () => void;
+  onFeedback: (feedback: QuoteFeedback) => void;
+  onNext: () => void;
+}) {
+  return (
+    <Card className="overflow-hidden border-white/65 bg-white/70 backdrop-blur-xl">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Sun className="h-5 w-5 text-amber-600" />
+              Morning boost
+            </CardTitle>
+            <CardDescription>
+              A confidence note to start the day with steadiness.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">Quote review pending</Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-expanded={expanded}
+              title={expanded ? "Collapse" : "Expand"}
+              onClick={onToggle}
+            >
+              <ChevronDown className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      {expanded && (
+        <CardContent className="space-y-4">
+          <blockquote className="border-l-4 border-primary pl-4 text-lg font-medium leading-8">
+            {quote.text}
+          </blockquote>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">{quote.author}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={quoteFeedback === "liked" ? "default" : "outline"}
+                size="sm"
+                onClick={() => onFeedback("liked")}
+                title="Like quote"
+              >
+                <ThumbsUp />
+                Like
+              </Button>
+              <Button
+                variant={quoteFeedback === "disliked" ? "default" : "outline"}
+                size="sm"
+                onClick={() => onFeedback("disliked")}
+                title="Dislike quote"
+              >
+                <ThumbsDown />
+                Dislike
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onNext}>
+                <Sparkles />
+                Another
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      )}
+    </Card>
   );
 }
 
