@@ -406,14 +406,11 @@ export default function HomePage() {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="relative flex flex-row items-start justify-between gap-4">
             <div className="flex items-start gap-3">
-              <BrandLogo />
+              <BrandLogo compact />
               <div>
-                <h1 className="text-xl font-semibold tracking-normal sm:text-3xl">
+                <h1 className="text-xl font-semibold leading-tight tracking-normal sm:text-2xl">
                   Good morning, {profile.name}
                 </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Your day, meals, water, and sleep in one calm view.
-                </p>
               </div>
             </div>
             <Button
