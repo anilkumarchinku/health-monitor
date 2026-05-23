@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { requireSignedInUser } from "@/lib/auth";
-import { saveHealthStateWithHistory } from "@/lib/health-sync";
+import { prepareLocalUserSession, saveHealthStateWithHistory } from "@/lib/health-sync";
 import { enablePushNotifications } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -98,7 +98,12 @@ export default function OnboardingPage() {
   const [notificationChoice, setNotificationChoice] = useState<"later" | "enabled" | "unset">("unset");
 
   useEffect(() => {
-    void requireSignedInUser();
+    async function boot() {
+      const user = await requireSignedInUser();
+      if (user) prepareLocalUserSession(user.id);
+    }
+
+    void boot();
     const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (detectedTimezone) {
       updateProfile("timezone", detectedTimezone);

@@ -5,6 +5,7 @@ export const historyKey = "daily-health-history";
 export const adminUsersKey = "daily-health-admin-users";
 
 const clientIdKey = "daily-health-client-id";
+const currentUserKey = "daily-health-current-user";
 
 type HealthState = {
   profile?: unknown;
@@ -57,6 +58,17 @@ export function getClientId() {
   return id;
 }
 
+export function prepareLocalUserSession(userId: string) {
+  const currentUserId = localStorage.getItem(currentUserKey);
+  if (currentUserId && currentUserId !== userId) {
+    localStorage.removeItem(storageKey);
+    localStorage.removeItem(historyKey);
+    localStorage.removeItem(clientIdKey);
+  }
+
+  localStorage.setItem(currentUserKey, userId);
+}
+
 export function readLocalState<T>() {
   const saved = localStorage.getItem(storageKey);
   return saved ? (JSON.parse(saved) as T) : null;
@@ -106,6 +118,26 @@ export async function loadAllSupabaseSnapshots<T extends HealthSnapshot>() {
 
   if (error || !data) return [];
   return data.map((row) => rowToSnapshot(row as SupabaseSnapshotRow)) as T[];
+}
+
+export async function loadLatestUserSnapshot<T extends HealthSnapshot>() {
+  const supabase = createSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("health_snapshots")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  if (error || !data?.[0]) return null;
+  return rowToSnapshot(data[0] as SupabaseSnapshotRow) as T;
 }
 
 function createTodaySnapshot(state: HealthState): HealthSnapshot {

@@ -46,7 +46,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { BrandLogo } from "@/components/brand-logo";
 import { requireSignedInUser, signOut } from "@/lib/auth";
-import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
+import {
+  loadLatestUserSnapshot,
+  prepareLocalUserSession,
+  saveHealthStateWithHistory,
+  storageKey,
+} from "@/lib/health-sync";
 import {
   enablePushNotifications,
   scheduleTodayLocalMealReminders,
@@ -215,7 +220,8 @@ export default function HomePage() {
     async function boot() {
       const user = await requireSignedInUser();
       if (!user) return;
-      loadStoredState({ redirectIfMissing: true });
+      prepareLocalUserSession(user.id);
+      await loadStoredState({ redirectIfMissing: true, syncRemote: true });
     }
 
     void boot();
@@ -241,9 +247,17 @@ export default function HomePage() {
     };
   }, []);
 
-  function loadStoredState(options?: { redirectIfMissing?: boolean }) {
+  async function loadStoredState(options?: { redirectIfMissing?: boolean; syncRemote?: boolean }) {
     const saved = localStorage.getItem(storageKey);
     if (!saved) {
+      if (options?.syncRemote) {
+        const latest = await loadLatestUserSnapshot<StoredHomeState & { date: string }>();
+        if (latest?.onboardingCompleted) {
+          localStorage.setItem(storageKey, JSON.stringify(latest));
+          applyStoredState(latest);
+          return;
+        }
+      }
       if (options?.redirectIfMissing) window.location.href = "/onboarding";
       return;
     }
@@ -254,26 +268,29 @@ export default function HomePage() {
         if (options?.redirectIfMissing) window.location.href = "/onboarding";
         return;
       }
-
-      const nextProfile = { ...defaultProfile, ...(parsed.profile ?? {}) };
-      setProfile(nextProfile);
-      setMeals(mergeMeals(parsed.meals, nextProfile));
-      setWater(parsed.water ?? 0);
-      setSleep(parsed.sleep ?? {
-        sleptAt: "23:15",
-        wokeAt: "06:45",
-        hours: 7,
-        minutes: 30,
-        quality: "Okay",
-      });
-      setSleepCheckCompleted(parsed.sleepCheckCompleted ?? false);
-      setQuoteIndex(parsed.quoteIndex ?? 0);
-      setQuoteFeedback(parsed.quoteFeedback ?? null);
-      setIsReady(true);
+      applyStoredState(parsed);
     } catch {
       localStorage.removeItem(storageKey);
       if (options?.redirectIfMissing) window.location.href = "/onboarding";
     }
+  }
+
+  function applyStoredState(parsed: StoredHomeState) {
+    const nextProfile = { ...defaultProfile, ...(parsed.profile ?? {}) };
+    setProfile(nextProfile);
+    setMeals(mergeMeals(parsed.meals, nextProfile));
+    setWater(parsed.water ?? 0);
+    setSleep(parsed.sleep ?? {
+      sleptAt: "23:15",
+      wokeAt: "06:45",
+      hours: 7,
+      minutes: 30,
+      quality: "Okay",
+    });
+    setSleepCheckCompleted(parsed.sleepCheckCompleted ?? false);
+    setQuoteIndex(parsed.quoteIndex ?? 0);
+    setQuoteFeedback(parsed.quoteFeedback ?? null);
+    setIsReady(true);
   }
 
   useEffect(() => {

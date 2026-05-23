@@ -14,6 +14,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
+import {
+  loadLatestUserSnapshot,
+  prepareLocalUserSession,
+  storageKey,
+} from "@/lib/health-sync";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function AuthPage() {
@@ -31,11 +36,24 @@ export default function AuthPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user) window.location.href = "/";
+      if (user) await continueAfterSignIn(user.id);
     }
 
     void checkSession();
   }, [supabase]);
+
+  async function continueAfterSignIn(userId: string) {
+    prepareLocalUserSession(userId);
+    const latest = await loadLatestUserSnapshot();
+
+    if (latest?.onboardingCompleted) {
+      localStorage.setItem(storageKey, JSON.stringify(latest));
+      window.location.href = "/";
+      return;
+    }
+
+    window.location.href = "/onboarding";
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,7 +66,7 @@ export default function AuthPage() {
 
     setLoading(true);
     const credentials = { email: email.trim(), password };
-    const { error } =
+    const { data, error } =
       mode === "sign-in"
         ? await supabase.auth.signInWithPassword(credentials)
         : await supabase.auth.signUp(credentials);
@@ -68,7 +86,12 @@ export default function AuthPage() {
     }
 
     showToast("Signed in");
-    window.location.href = "/";
+    if (data.user) {
+      await continueAfterSignIn(data.user.id);
+      return;
+    }
+
+    window.location.href = "/onboarding";
   }
 
   return (
