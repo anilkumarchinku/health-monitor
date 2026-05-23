@@ -3,31 +3,24 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  Bell,
   Camera,
   ChevronDown,
   Check,
   Clock,
   Droplets,
-  History,
   Home,
-  LogOut,
-  Menu,
   Minus,
   Moon,
   Plus,
   Save,
   Share2,
-  Shield,
-  X,
   Sparkles,
   Sun,
   ThumbsDown,
   ThumbsUp,
-  TimerReset,
   Utensils,
-  User,
 } from "lucide-react";
+import { AppNav } from "@/components/app-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,8 +37,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import { BrandLogo } from "@/components/brand-logo";
-import { requireSignedInUser, signOut } from "@/lib/auth";
+import { requireSignedInUser } from "@/lib/auth";
 import {
   loadLatestUserSnapshot,
   prepareLocalUserSession,
@@ -53,9 +45,7 @@ import {
   storageKey,
 } from "@/lib/health-sync";
 import {
-  enablePushNotifications,
   scheduleTodayLocalMealReminders,
-  sendTestPushNotification,
 } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -206,8 +196,6 @@ export default function HomePage() {
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [quoteFeedback, setQuoteFeedback] = useState<QuoteFeedback>(null);
   const [sleepCheckCompleted, setSleepCheckCompleted] = useState(false);
-  const [notificationStatus, setNotificationStatus] = useState("Not enabled");
-  const [menuOpen, setMenuOpen] = useState(false);
   const [activeMeal, setActiveMeal] = useState<MealType>("breakfast");
   const [expandedSections, setExpandedSections] = useState({
     morningBoost: true,
@@ -361,25 +349,6 @@ export default function HomePage() {
     reader.readAsDataURL(file);
   }
 
-  async function enableNotifications() {
-    const result = await enablePushNotifications();
-    const labels: Record<typeof result, string> = {
-      blocked: "Blocked",
-      enabled: "Push enabled",
-      "not-configured": "Setup needed",
-      "signed-out": "Sign in first",
-      unsupported: "Unsupported",
-    };
-    setNotificationStatus(labels[result]);
-    showToast(result === "enabled" ? "Push notifications enabled" : labels[result]);
-  }
-
-  async function sendTestNotification() {
-    const result = await sendTestPushNotification();
-    setNotificationStatus(result === "sent" ? "Test sent" : "Enable first");
-    showToast(result === "sent" ? "Test push sent" : "Enable notifications first");
-  }
-
   function rescheduleMeal(type: MealType, minutes: number) {
     const meal = meals.find((item) => item.type === type);
     if (!meal) return;
@@ -418,49 +387,7 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
-      <section className="glass-shell sticky top-3 z-50 mx-auto max-w-7xl rounded-lg">
-        <div className="relative flex flex-row items-start justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-start gap-3">
-            <BrandLogo compact />
-            <div>
-              <h1 className="text-xl font-semibold leading-tight tracking-normal sm:text-2xl">
-                Good morning, {profile.name}
-              </h1>
-            </div>
-          </div>
-          <Button
-            className="h-11 w-11 shrink-0 bg-white/75 backdrop-blur"
-            variant="outline"
-            size="icon"
-            aria-expanded={menuOpen}
-            title={menuOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMenuOpen((current) => !current)}
-          >
-            {menuOpen ? <X /> : <Menu />}
-          </Button>
-
-          {menuOpen && (
-            <div className="absolute right-4 top-16 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl sm:right-6 lg:right-8">
-              <DashboardMenuButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
-              <DashboardMenuButton icon={<Bell />} label="Test push" onClick={sendTestNotification} />
-              <DashboardMenuLink icon={<Utensils />} label="Lunch page" href="/meal/lunch" />
-              <DashboardMenuLink icon={<History />} label="History" href="/history" />
-              <DashboardMenuLink icon={<User />} label="Profile" href="/profile" />
-              <DashboardMenuLink icon={<Shield />} label="Admin" href="/admin" />
-              <DashboardMenuButton
-                icon={<TimerReset />}
-                label="Reset today"
-                onClick={() => {
-                  resetToday();
-                  setMenuOpen(false);
-                }}
-                dark
-              />
-              <DashboardMenuButton icon={<LogOut />} label="Sign out" onClick={() => void signOut()} />
-            </div>
-          )}
-        </div>
-      </section>
+      <AppNav title={`Good morning, ${profile.name}`} onResetToday={resetToday} />
 
       <section className="glass-shell mx-auto mt-4 max-w-7xl rounded-lg">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
@@ -1269,55 +1196,6 @@ function TimeField({
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} type="time" value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
-  );
-}
-
-function DashboardMenuButton({
-  icon,
-  label,
-  onClick,
-  dark = false,
-}: {
-  icon: React.ReactElement;
-  label: string;
-  onClick: () => void;
-  dark?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className={`flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium transition-all active:scale-[0.98] ${
-        dark ? "bg-zinc-950 text-white hover:bg-zinc-800" : "hover:bg-zinc-100"
-      }`}
-      onClick={onClick}
-    >
-      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white/75 text-foreground shadow-sm">
-        {icon}
-      </span>
-      {label}
-    </button>
-  );
-}
-
-function DashboardMenuLink({
-  icon,
-  label,
-  href,
-}: {
-  icon: React.ReactElement;
-  label: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-all hover:bg-zinc-100 active:scale-[0.98]"
-    >
-      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white/75 text-foreground shadow-sm">
-        {icon}
-      </span>
-      {label}
-    </Link>
   );
 }
 

@@ -12,6 +12,7 @@ import {
   Sun,
   Utensils,
 } from "lucide-react";
+import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -162,6 +163,7 @@ export default function OnboardingPage() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6">
+      <AppNav title="Set up your companion" />
       <div className="glass-shell mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-6xl flex-col gap-5 rounded-lg p-4 sm:p-6">
         <section className="glass-dark rounded-lg p-5">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">

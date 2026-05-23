@@ -10,6 +10,7 @@ import {
   Sun,
   Utensils,
 } from "lucide-react";
+import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,6 +182,7 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
+      <AppNav title="Profile" />
       <section className="glass-shell mx-auto max-w-5xl rounded-lg">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

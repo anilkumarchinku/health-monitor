@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { LogIn, UserPlus } from "lucide-react";
+import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,6 +97,7 @@ export default function AuthPage() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6">
+      <AppNav title={mode === "sign-in" ? "Welcome back" : "Create account"} signedIn={false} />
       <section className="glass-shell mx-auto flex min-h-[calc(100vh-40px)] max-w-5xl items-center justify-center rounded-lg p-4">
         <Card className="w-full max-w-md">
           <CardHeader>

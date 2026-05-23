@@ -10,6 +10,7 @@ import {
   Sparkles,
   Utensils,
 } from "lucide-react";
+import { AppNav } from "@/components/app-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -161,6 +162,7 @@ export default function HistoryPage() {
 
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
+      <AppNav title="Daily history" />
       <section className="glass-shell mx-auto max-w-6xl rounded-lg">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
