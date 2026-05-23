@@ -1081,7 +1081,9 @@ function MorningBoostCard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Sun className="h-5 w-5 text-amber-600" />
+              <span className="morning-sun-badge" aria-hidden="true">
+                <Sun className="morning-sun-icon h-5 w-5 text-amber-600" />
+              </span>
               Morning boost
             </CardTitle>
             <CardDescription>

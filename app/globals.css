@@ -128,6 +128,59 @@
     }
   }
 
+  @keyframes morning-sun-spin {
+    from {
+      transform: rotate(0deg) scale(1);
+    }
+    to {
+      transform: rotate(360deg) scale(1);
+    }
+  }
+
+  @keyframes morning-sun-pulse {
+    0%,
+    100% {
+      box-shadow:
+        0 0 0 0 rgba(245, 158, 11, 0.22),
+        0 0 12px rgba(245, 158, 11, 0.34);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow:
+        0 0 0 8px rgba(245, 158, 11, 0.08),
+        0 0 22px rgba(245, 158, 11, 0.58);
+      transform: scale(1.12);
+    }
+  }
+
+  .morning-sun-badge {
+    align-items: center;
+    animation: morning-sun-pulse 1.5s ease-in-out infinite;
+    background: rgba(253, 230, 138, 0.72);
+    border: 1px solid rgba(245, 158, 11, 0.34);
+    border-radius: 999px;
+    display: inline-flex;
+    height: 2rem;
+    justify-content: center;
+    position: relative;
+    width: 2rem;
+  }
+
+  .morning-sun-badge::after {
+    animation: morning-sun-spin 1.15s linear infinite;
+    border: 2px dashed rgba(245, 158, 11, 0.7);
+    border-radius: 999px;
+    content: "";
+    inset: -5px;
+    position: absolute;
+  }
+
+  .morning-sun-icon {
+    animation: morning-sun-spin 1.35s linear infinite !important;
+    position: relative;
+    z-index: 1;
+  }
+
   .lucide {
     animation: dee-icon-float 2.4s ease-in-out infinite;
     transform-box: fill-box;
@@ -165,7 +218,10 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .lucide {
+    .lucide,
+    .morning-sun-badge,
+    .morning-sun-badge::after,
+    .morning-sun-icon {
       animation: none;
     }
   }
