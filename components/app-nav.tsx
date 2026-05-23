@@ -82,7 +82,7 @@ export function AppNav({
                     <NavButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
                     <NavButton icon={<Bell />} label="Test push" onClick={sendTestNotification} />
                     <NavLink icon={<Home />} label="Dashboard" href="/" />
-                    <NavLink icon={<Utensils />} label="Lunch page" href="/meal/lunch" />
+                    <NavLink icon={<Utensils />} label="Meal check-in" href="/meal/lunch" />
                     <NavLink icon={<History />} label="History" href="/history" />
                     <NavLink icon={<User />} label="Profile" href="/profile" />
                     <NavLink icon={<Shield />} label="Admin" href="/admin" />

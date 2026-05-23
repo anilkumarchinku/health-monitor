@@ -317,7 +317,7 @@ export default function LunchMealPage() {
     setAppState(nextState);
     setMeal(nextMeal);
     setRescheduleMessage(
-      `Done, let's meet after ${minutes === 60 ? "1hr" : `+${minutes} min`} 😘`,
+      `Done, let's meet after ${minutes === 60 ? "+1hr" : `+${minutes} min`} 🥺`,
     );
     showToast(`Reminder moved by ${minutes === 60 ? "1 hour" : `${minutes} minutes`}`);
     setSaved(false);
@@ -406,10 +406,20 @@ export default function LunchMealPage() {
 
   if (rescheduleMessage) {
     return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <p className="max-w-2xl text-center text-4xl font-semibold leading-tight tracking-normal text-foreground sm:text-6xl">
-          {rescheduleMessage}
-        </p>
+      <main className="flex min-h-screen items-center justify-center px-4 py-8">
+        <div className="glass-shell flex w-full max-w-md flex-col items-center gap-5 rounded-lg p-5 text-center">
+          <div className="glass-surface overflow-hidden rounded-lg p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/reschedule-elephant.svg"
+              alt="Emotional reminder friend"
+              className="h-64 w-64 object-contain"
+            />
+          </div>
+          <p className="text-3xl font-semibold leading-tight tracking-normal text-foreground sm:text-5xl">
+            {rescheduleMessage}
+          </p>
+        </div>
       </main>
     );
   }
