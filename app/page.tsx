@@ -42,6 +42,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast";
 import { BrandLogo } from "@/components/brand-logo";
 import { requireSignedInUser, signOut } from "@/lib/auth";
 import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
@@ -184,6 +185,7 @@ function formatWater(amount: number) {
 }
 
 export default function HomePage() {
+  const showToast = useToast();
   const [isReady, setIsReady] = useState(false);
   const [profile, setProfile] = useState<Profile>(defaultProfile);
   const [meals, setMeals] = useState<MealLog[]>(() => createMeals(defaultProfile));
@@ -352,11 +354,13 @@ export default function HomePage() {
       unsupported: "Unsupported",
     };
     setNotificationStatus(labels[result]);
+    showToast(result === "enabled" ? "Push notifications enabled" : labels[result]);
   }
 
   async function sendTestNotification() {
     const result = await sendTestPushNotification();
     setNotificationStatus(result === "sent" ? "Test sent" : "Enable first");
+    showToast(result === "sent" ? "Test push sent" : "Enable notifications first");
   }
 
   function rescheduleMeal(type: MealType, minutes: number) {
@@ -370,12 +374,14 @@ export default function HomePage() {
       date.getMinutes(),
     ).padStart(2, "0")}`;
     updateMeal(type, { plannedTime: nextTime, status: "snoozed" });
+    showToast(`${mealLabels[type]} reminder moved`);
   }
 
   function resetToday() {
     setMeals(createMeals(profile));
     setWater(0);
     setQuoteFeedback(null);
+    showToast("Today has been reset");
   }
 
   const quote = quotes[quoteIndex];
@@ -745,7 +751,10 @@ export default function HomePage() {
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Button
-                        onClick={() => updateMeal(activeMeal, { status: "logged" })}
+                        onClick={() => {
+                          updateMeal(activeMeal, { status: "logged" });
+                          showToast(`${mealLabels[activeMeal]} has saved`);
+                        }}
                       >
                         <Save />
                         Save meal
@@ -759,7 +768,10 @@ export default function HomePage() {
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => updateMeal(activeMeal, { status: "skipped" })}
+                        onClick={() => {
+                          updateMeal(activeMeal, { status: "skipped" });
+                          showToast(`${mealLabels[activeMeal]} skipped`);
+                        }}
                       >
                         Skip today
                       </Button>

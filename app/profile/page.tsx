@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
 import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
 
@@ -102,6 +103,7 @@ function meal(type: MealType, time: string): MealLog {
 }
 
 export default function ProfilePage() {
+  const showToast = useToast();
   const [profile, setProfile] = useState<Profile>(defaultProfile);
   const [meals, setMeals] = useState<MealLog[]>(() => createMeals(defaultProfile));
   const [storedState, setStoredState] = useState<Partial<StoredAppState>>({});
@@ -174,6 +176,7 @@ export default function ProfilePage() {
     void saveHealthStateWithHistory(nextState);
     setStoredState(nextState);
     setSaved(true);
+    showToast("Profile has saved");
   }
 
   return (

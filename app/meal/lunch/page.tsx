@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
 import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
 
@@ -90,6 +91,7 @@ const fallbackSleep: SleepLog = {
 };
 
 export default function LunchMealPage() {
+  const showToast = useToast();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -194,6 +196,7 @@ export default function LunchMealPage() {
     const nextState = { ...appState, water: nextWater };
     void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
+    showToast("Water check saved");
     setView(nextState.sleepCheckCompleted ? "details" : "sleep");
   }
 
@@ -201,6 +204,7 @@ export default function LunchMealPage() {
     const nextState = { ...appState, sleep, sleepCheckCompleted: true };
     void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
+    showToast("Sleep check saved");
     setView("details");
   }
 
@@ -230,6 +234,7 @@ export default function LunchMealPage() {
     setAppState(nextState);
     setLunch(updatedLunch);
     setSaved(true);
+    showToast("Meal has saved");
   }
 
   function reschedule(minutes: number) {
@@ -257,6 +262,7 @@ export default function LunchMealPage() {
     setRescheduleMessage(
       `Done, let's meet after ${minutes === 60 ? "1hr" : `+${minutes} min`} 😘`,
     );
+    showToast(`Reminder moved by ${minutes === 60 ? "1 hour" : `${minutes} minutes`}`);
     setSaved(false);
   }
 

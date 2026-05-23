@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/toast";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function AuthPage() {
+  const showToast = useToast();
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,10 +62,12 @@ export default function AuthPage() {
 
     if (mode === "sign-up") {
       setMessage("Account created. Check your email if Supabase asks for confirmation, then sign in.");
+      showToast("Account created");
       setMode("sign-in");
       return;
     }
 
+    showToast("Signed in");
     window.location.href = "/";
   }
 
