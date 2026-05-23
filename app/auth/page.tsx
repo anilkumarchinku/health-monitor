@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Heart, LogIn, UserPlus } from "lucide-react";
+import { LogIn, UserPlus } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -71,9 +72,7 @@ export default function AuthPage() {
       <section className="glass-shell mx-auto flex min-h-[calc(100vh-40px)] max-w-5xl items-center justify-center rounded-lg p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-md bg-zinc-950 text-white">
-              <Heart className="h-5 w-5" />
-            </div>
+            <BrandLogo className="mb-2" />
             <CardTitle>{mode === "sign-in" ? "Welcome back" : "Create your account"}</CardTitle>
             <CardDescription>
               Sign in so meals, water, sleep, images, and reminders belong to your user account.

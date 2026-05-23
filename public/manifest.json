@@ -1,10 +1,17 @@
 {
-  "name": "Daily Health Companion",
-  "short_name": "HealthComp",
+  "name": "Dee Meal Monitor System",
+  "short_name": "Dee Meals",
   "description": "Meal, water, sleep, and motivation tracking.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8f5ef",
   "theme_color": "#15736d",
-  "icons": []
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

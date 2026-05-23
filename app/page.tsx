@@ -9,7 +9,6 @@ import {
   Check,
   Clock,
   Droplets,
-  Heart,
   History,
   Home,
   ImagePlus,
@@ -43,6 +42,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { BrandLogo } from "@/components/brand-logo";
 import { requireSignedInUser, signOut } from "@/lib/auth";
 import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
 import {
@@ -99,15 +99,15 @@ const defaultProfile: Profile = {
 const quotes = [
   {
     text: "Confidence grows when you keep promises to yourself, even the small ones.",
-    author: "Daily Health Companion",
+    author: "Dee Meal Monitor System",
   },
   {
     text: "Begin gently. Courage does not need noise to be real.",
-    author: "Daily Health Companion",
+    author: "Dee Meal Monitor System",
   },
   {
     text: "Your body listens to the way you care for it today.",
-    author: "Daily Health Companion",
+    author: "Dee Meal Monitor System",
   },
 ];
 
@@ -399,11 +399,9 @@ export default function HomePage() {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-zinc-950 text-white shadow-soft">
-                <Heart className="h-5 w-5" aria-hidden />
-              </div>
+              <BrandLogo />
               <div>
-                <p className="text-sm text-muted-foreground">Daily Health Companion</p>
+                <p className="text-sm text-muted-foreground">Dee Meal Monitor System</p>
                 <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
                   Good morning, {profile.name}
                 </h1>

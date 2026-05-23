@@ -2,13 +2,13 @@ self.addEventListener("push", (event) => {
   const data = event.data
     ? event.data.json()
     : {
-        title: "Daily Health Companion",
+        title: "Dee Meal Monitor System",
         body: "Time for a gentle check-in.",
         url: "/",
       };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || "Daily Health Companion", {
+    self.registration.showNotification(data.title || "Dee Meal Monitor System", {
       body: data.body || "Time for a gentle check-in.",
       icon: "/icon.svg",
       badge: "/icon.svg",

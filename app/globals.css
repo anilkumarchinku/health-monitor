@@ -37,6 +37,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     background:
+      url("/dee-bg.svg") center 6rem / min(900px, 120vw) auto no-repeat fixed,
       linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(226, 232, 240, 0.62)),
       linear-gradient(45deg, transparent 0 22%, rgba(20, 184, 166, 0.08) 22% 36%, transparent 36% 100%),
       linear-gradient(125deg, transparent 0 55%, rgba(244, 114, 182, 0.08) 55% 70%, transparent 70% 100%),
@@ -46,6 +47,7 @@
 
   body::before {
     background:
+      radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.65), transparent 20%),
       linear-gradient(115deg, transparent 0 12%, rgba(255, 255, 255, 0.42) 12% 13%, transparent 13% 100%),
       linear-gradient(72deg, transparent 0 48%, rgba(15, 23, 42, 0.05) 48% 49%, transparent 49% 100%);
     content: "";

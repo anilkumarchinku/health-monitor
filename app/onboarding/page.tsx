@@ -12,6 +12,7 @@ import {
   Sun,
   Utensils,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -160,9 +161,7 @@ export default function OnboardingPage() {
         <section className="glass-dark rounded-lg p-5">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-xl">
-              <div className="flex h-11 w-11 items-center justify-center rounded-md bg-white text-black">
-                <Sparkles className="h-5 w-5" />
-              </div>
+              <BrandLogo className="text-white" dark />
               <h1 className="mt-4 text-2xl font-semibold tracking-normal sm:text-3xl">
                 Let&apos;s set up your companion.
               </h1>

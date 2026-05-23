@@ -9,8 +9,8 @@ import {
   Save,
   Sun,
   Utensils,
-  User,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -182,11 +182,9 @@ export default function ProfilePage() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-zinc-950 text-white shadow-soft">
-                <User className="h-5 w-5" aria-hidden />
-              </div>
+              <BrandLogo compact />
               <div>
-                <p className="text-sm text-muted-foreground">Daily Health Companion</p>
+                <p className="text-sm text-muted-foreground">Dee Meal Monitor System</p>
                 <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
                   Profile
                 </h1>

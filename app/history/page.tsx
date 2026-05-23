@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
-  CalendarDays,
   ChevronDown,
   Droplets,
   Moon,
@@ -21,6 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { BrandLogo } from "@/components/brand-logo";
 import { requireSignedInUser } from "@/lib/auth";
 import { loadSyncedHistory, saveHealthHistory, storageKey } from "@/lib/health-sync";
 
@@ -165,9 +165,7 @@ export default function HistoryPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-zinc-950 text-white shadow-soft">
-                <CalendarDays className="h-5 w-5" aria-hidden />
-              </div>
+              <BrandLogo compact />
               <div>
                 <p className="text-sm text-muted-foreground">Stored health details</p>
                 <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
