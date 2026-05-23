@@ -201,7 +201,6 @@ export default function HomePage() {
   const [quoteFeedback, setQuoteFeedback] = useState<QuoteFeedback>(null);
   const [sleepCheckCompleted, setSleepCheckCompleted] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState("Not enabled");
-  const [userEmail, setUserEmail] = useState("");
   const [activeMeal, setActiveMeal] = useState<MealType>("breakfast");
   const [expandedSections, setExpandedSections] = useState({
     morningBoost: true,
@@ -214,7 +213,6 @@ export default function HomePage() {
     async function boot() {
       const user = await requireSignedInUser();
       if (!user) return;
-      setUserEmail(user.email ?? "");
       loadStoredState({ redirectIfMissing: true });
     }
 
@@ -407,11 +405,9 @@ export default function HomePage() {
             <div className="flex items-start gap-3">
               <BrandLogo />
               <div>
-                <p className="text-sm text-muted-foreground">Dee Meal Monitor System</p>
                 <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
                   Good morning, {profile.name}
                 </h1>
-                {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
               </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
