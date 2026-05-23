@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -15,7 +14,6 @@ import {
   Utensils,
 } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
-import { BrandLogo } from "@/components/brand-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -427,27 +425,7 @@ export default function LunchMealPage() {
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
       <AppNav title={`${mealLabel} check-in`} />
-      <section className="glass-shell mx-auto max-w-5xl rounded-lg">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <BrandLogo compact />
-              <div>
-                <p className="text-sm text-muted-foreground">Notification meal check-in</p>
-                <h1 className="text-2xl font-semibold tracking-normal">{mealLabel}</h1>
-              </div>
-            </div>
-            <Button asChild variant="outline">
-              <Link href="/">
-                <ArrowLeft />
-                Dashboard
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <div className="glass-shell mx-auto mt-5 w-full max-w-3xl space-y-5 rounded-lg p-3 sm:p-5">
+      <div className="glass-shell mx-auto w-full max-w-3xl space-y-5 rounded-lg p-3 sm:p-5">
         {view === "prompt" && (
           <div className="grid gap-5 md:grid-cols-2">
             <Card>
