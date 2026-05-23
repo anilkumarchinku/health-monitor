@@ -23,6 +23,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { requireSignedInUser } from "@/lib/auth";
+import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -58,8 +60,6 @@ type StoredAppState = {
   quoteIndex: number;
   quoteFeedback: unknown;
 };
-
-const storageKey = "daily-health-companion";
 
 const defaultProfile: Profile = {
   name: "Sweetheart",
@@ -110,17 +110,24 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    const savedState = localStorage.getItem(storageKey);
-    if (!savedState) return;
+    async function loadProfile() {
+      const user = await requireSignedInUser();
+      if (!user) return;
 
-    try {
-      const parsed = JSON.parse(savedState) as StoredAppState;
-      setStoredState(parsed);
-      setProfile(parsed.profile ?? defaultProfile);
-      setMeals(parsed.meals ?? createMeals(parsed.profile ?? defaultProfile));
-    } catch {
-      localStorage.removeItem(storageKey);
+      const savedState = localStorage.getItem(storageKey);
+      if (!savedState) return;
+
+      try {
+        const parsed = JSON.parse(savedState) as StoredAppState;
+        setStoredState(parsed);
+        setProfile(parsed.profile ?? defaultProfile);
+        setMeals(parsed.meals ?? createMeals(parsed.profile ?? defaultProfile));
+      } catch {
+        localStorage.removeItem(storageKey);
+      }
     }
+
+    void loadProfile();
   }, []);
 
   function toggleSection(section: keyof typeof expandedSections) {
@@ -162,7 +169,7 @@ export default function ProfilePage() {
       quoteFeedback: storedState.quoteFeedback ?? null,
     };
 
-    localStorage.setItem(storageKey, JSON.stringify(nextState));
+    void saveHealthStateWithHistory(nextState);
     setStoredState(nextState);
     setSaved(true);
   }

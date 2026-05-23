@@ -21,6 +21,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { requireSignedInUser } from "@/lib/auth";
+import { loadSyncedHistory, saveHealthHistory, storageKey } from "@/lib/health-sync";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 type QuoteFeedback = "liked" | "disliked" | null;
@@ -58,9 +60,6 @@ type DaySummary = {
   updatedAt?: string;
 };
 
-const storageKey = "daily-health-companion";
-const historyKey = "daily-health-history";
-
 const mealLabels: Record<MealType, string> = {
   breakfast: "Breakfast",
   lunch: "Lunch",
@@ -97,16 +96,13 @@ export default function HistoryPage() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const savedHistory = localStorage.getItem(historyKey);
-    const savedCurrent = localStorage.getItem(storageKey);
-    let history: DaySummary[] = [];
+    async function loadHistory() {
+    const user = await requireSignedInUser();
+    if (!user) return;
 
-    try {
-      history = savedHistory ? (JSON.parse(savedHistory) as DaySummary[]) : [];
-    } catch {
-      history = [];
-    }
+    const today = new Date().toISOString().slice(0, 10);
+    const savedCurrent = localStorage.getItem(storageKey);
+    let history = await loadSyncedHistory<DaySummary>();
 
     if (savedCurrent) {
       try {
@@ -120,7 +116,7 @@ export default function HistoryPage() {
           todaySummary,
           ...history.filter((day) => day.date !== today),
         ].slice(0, 30);
-        localStorage.setItem(historyKey, JSON.stringify(history));
+        await saveHealthHistory(todaySummary);
       } catch {
         localStorage.removeItem(storageKey);
       }
@@ -133,6 +129,9 @@ export default function HistoryPage() {
         return acc;
       }, {}),
     );
+    }
+
+    void loadHistory();
   }, []);
 
   const totals = useMemo(() => {

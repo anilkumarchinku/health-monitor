@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   Check,
@@ -24,6 +24,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { requireSignedInUser } from "@/lib/auth";
+import { saveHealthStateWithHistory } from "@/lib/health-sync";
+import { enablePushNotifications } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -50,8 +53,6 @@ type MealLog = {
   status: "pending" | "logged" | "snoozed" | "skipped";
 };
 
-const storageKey = "daily-health-companion";
-
 const defaultProfile: Profile = {
   name: "",
   wakeTime: "07:00",
@@ -64,7 +65,7 @@ const defaultProfile: Profile = {
 };
 
 const goals = ["More energy", "Better sleep", "Balanced meals", "More discipline"];
-const steps = ["You", "Routine", "Goals", "Reminders"];
+const steps = ["Notify", "You", "Routine", "Goals"];
 
 function createMeals(profile: Profile): MealLog[] {
   return [
@@ -91,36 +92,35 @@ function createMeal(type: MealType, time: string): MealLog {
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState<Profile>(defaultProfile);
-  const [notificationChoice, setNotificationChoice] = useState<"later" | "enabled">("later");
+  const [notificationChoice, setNotificationChoice] = useState<"later" | "enabled" | "unset">("unset");
+
+  useEffect(() => {
+    void requireSignedInUser();
+  }, []);
 
   const progress = Math.round(((step + 1) / 4) * 100);
   const currentStepComplete =
-    (step === 0 && profile.name.trim().length > 0 && profile.primaryGoal.length > 0) ||
-    (step === 1 &&
+    (step === 0 && notificationChoice !== "unset") ||
+    (step === 1 && profile.name.trim().length > 0 && profile.primaryGoal.length > 0) ||
+    (step === 2 &&
       Boolean(profile.breakfastTime) &&
       Boolean(profile.lunchTime) &&
       Boolean(profile.dinnerTime)) ||
-    (step === 2 &&
+    (step === 3 &&
       Boolean(profile.wakeTime) &&
       Boolean(profile.sleepReminder) &&
-      profile.waterGoal >= 500) ||
-    (step === 3 && Boolean(notificationChoice));
+      profile.waterGoal >= 500);
 
   function updateProfile<K extends keyof Profile>(key: K, value: Profile[K]) {
     setProfile((current) => ({ ...current, [key]: value }));
   }
 
   async function requestNotifications() {
-    if (!("Notification" in window)) {
-      setNotificationChoice("later");
-      return;
-    }
-
-    const result = await Notification.requestPermission();
-    setNotificationChoice(result === "granted" ? "enabled" : "later");
+    const result = await enablePushNotifications();
+    setNotificationChoice(result === "enabled" ? "enabled" : "later");
   }
 
-  function finishOnboarding() {
+  async function finishOnboarding() {
     const completedProfile = {
       ...profile,
       name: profile.name.trim() || "Sweetheart",
@@ -144,17 +144,7 @@ export default function OnboardingPage() {
       notificationPreference: notificationChoice,
     };
 
-    localStorage.setItem(storageKey, JSON.stringify(appState));
-    localStorage.setItem(
-      "daily-health-history",
-      JSON.stringify([
-        {
-          date: new Date().toISOString().slice(0, 10),
-          ...appState,
-          updatedAt: new Date().toISOString(),
-        },
-      ]),
-    );
+    await saveHealthStateWithHistory(appState);
     window.location.href = "/";
   }
 
@@ -214,6 +204,52 @@ export default function OnboardingPage() {
               <>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-2xl">
+                    <Bell className="h-6 w-6 text-primary" />
+                    Enable notifications first
+                  </CardTitle>
+                  <CardDescription>
+                    Meal, water, morning quote, and sleep reminders work best with notifications.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={requestNotifications}
+                    className={`rounded-lg border p-5 text-left backdrop-blur-xl transition ${
+                      notificationChoice === "enabled"
+                        ? "border-primary bg-primary/10"
+                        : "bg-white/55 hover:border-primary"
+                    }`}
+                  >
+                    <Bell className="mb-4 h-6 w-6" />
+                    <p className="font-semibold">Enable notifications</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      The browser will ask permission now.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNotificationChoice("later")}
+                    className={`rounded-lg border p-5 text-left backdrop-blur-xl transition ${
+                      notificationChoice === "later"
+                        ? "border-primary bg-primary/10"
+                        : "bg-white/55 hover:border-primary"
+                    }`}
+                  >
+                    <Sparkles className="mb-4 h-6 w-6" />
+                    <p className="font-semibold">Maybe later</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      In-app reminders will still appear on the dashboard.
+                    </p>
+                  </button>
+                </CardContent>
+              </>
+            )}
+
+            {step === 1 && (
+              <>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-2xl">
                     <Sun className="h-6 w-6 text-amber-600" />
                     What should we call you?
                   </CardTitle>
@@ -249,7 +285,7 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {step === 1 && (
+            {step === 2 && (
               <>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-2xl">
@@ -283,7 +319,7 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {step === 2 && (
+            {step === 3 && (
               <>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-2xl">
@@ -340,52 +376,6 @@ export default function OnboardingPage() {
                       </Button>
                     </div>
                   </div>
-                </CardContent>
-              </>
-            )}
-
-            {step === 3 && (
-              <>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <Bell className="h-6 w-6 text-primary" />
-                    Reminders
-                  </CardTitle>
-                  <CardDescription>
-                    Enable browser notifications now or keep using in-app reminders.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={requestNotifications}
-                    className={`rounded-lg border p-5 text-left backdrop-blur-xl transition ${
-                      notificationChoice === "enabled"
-                        ? "border-primary bg-primary/10"
-                        : "bg-white/55 hover:border-primary"
-                    }`}
-                  >
-                    <Bell className="mb-4 h-6 w-6" />
-                    <p className="font-semibold">Enable notifications</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Best for meal, water, quote, and sleep reminders.
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNotificationChoice("later")}
-                    className={`rounded-lg border p-5 text-left backdrop-blur-xl transition ${
-                      notificationChoice === "later"
-                        ? "border-primary bg-primary/10"
-                        : "bg-white/55 hover:border-primary"
-                    }`}
-                  >
-                    <Sparkles className="mb-4 h-6 w-6" />
-                    <p className="font-semibold">Maybe later</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      The dashboard will still show your next reminder.
-                    </p>
-                  </button>
                 </CardContent>
               </>
             )}

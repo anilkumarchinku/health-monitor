@@ -13,11 +13,13 @@ import {
   History,
   Home,
   ImagePlus,
+  LogOut,
   Minus,
   Moon,
   Plus,
   Save,
   Share2,
+  Shield,
   Sparkles,
   Sun,
   ThumbsDown,
@@ -41,6 +43,13 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { requireSignedInUser, signOut } from "@/lib/auth";
+import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
+import {
+  enablePushNotifications,
+  scheduleTodayLocalMealReminders,
+  sendTestPushNotification,
+} from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 type QuoteFeedback = "liked" | "disliked" | null;
@@ -106,6 +115,17 @@ const mealLabels: Record<MealType, string> = {
   dinner: "Dinner",
 };
 
+type StoredHomeState = {
+  onboardingCompleted?: boolean;
+  profile?: Profile;
+  meals?: MealLog[];
+  water?: number;
+  sleep?: SleepLog;
+  sleepCheckCompleted?: boolean;
+  quoteIndex?: number;
+  quoteFeedback?: QuoteFeedback;
+};
+
 function createMeals(profile: Profile): MealLog[] {
   return [
     {
@@ -144,6 +164,14 @@ function createMeals(profile: Profile): MealLog[] {
   ];
 }
 
+function mergeMeals(savedMeals: MealLog[] | undefined, profile: Profile) {
+  const defaults = createMeals(profile);
+  return defaults.map((defaultMeal) => {
+    const savedMeal = savedMeals?.find((meal) => meal.type === defaultMeal.type);
+    return savedMeal ? { ...defaultMeal, ...savedMeal } : defaultMeal;
+  });
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -169,93 +197,100 @@ export default function HomePage() {
   const [quoteFeedback, setQuoteFeedback] = useState<QuoteFeedback>(null);
   const [sleepCheckCompleted, setSleepCheckCompleted] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState("Not enabled");
+  const [userEmail, setUserEmail] = useState("");
   const [activeMeal, setActiveMeal] = useState<MealType>("breakfast");
   const [expandedSections, setExpandedSections] = useState({
     morningBoost: true,
+    todaysCheckIn: true,
     profileSchedule: false,
     todayTimeline: false,
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem("daily-health-companion");
+    async function boot() {
+      const user = await requireSignedInUser();
+      if (!user) return;
+      setUserEmail(user.email ?? "");
+      loadStoredState({ redirectIfMissing: true });
+    }
+
+    void boot();
+
+    function refreshFromStorage() {
+      loadStoredState();
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") {
+        loadStoredState();
+      }
+    }
+
+    window.addEventListener("focus", refreshFromStorage);
+    window.addEventListener("pageshow", refreshFromStorage);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.removeEventListener("focus", refreshFromStorage);
+      window.removeEventListener("pageshow", refreshFromStorage);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, []);
+
+  function loadStoredState(options?: { redirectIfMissing?: boolean }) {
+    const saved = localStorage.getItem(storageKey);
     if (!saved) {
-      window.location.href = "/onboarding";
+      if (options?.redirectIfMissing) window.location.href = "/onboarding";
       return;
     }
 
     try {
-      const parsed = JSON.parse(saved) as {
-        onboardingCompleted?: boolean;
-        profile: Profile;
-        meals: MealLog[];
-        water: number;
-        sleep: SleepLog;
-        sleepCheckCompleted?: boolean;
-        quoteIndex: number;
-        quoteFeedback: QuoteFeedback;
-      };
+      const parsed = JSON.parse(saved) as StoredHomeState;
       if (!parsed.onboardingCompleted) {
-        window.location.href = "/onboarding";
+        if (options?.redirectIfMissing) window.location.href = "/onboarding";
         return;
       }
-      setProfile(parsed.profile);
-      setMeals(parsed.meals);
-      setWater(parsed.water);
-      setSleep(parsed.sleep);
+
+      const nextProfile = { ...defaultProfile, ...(parsed.profile ?? {}) };
+      setProfile(nextProfile);
+      setMeals(mergeMeals(parsed.meals, nextProfile));
+      setWater(parsed.water ?? 0);
+      setSleep(parsed.sleep ?? {
+        sleptAt: "23:15",
+        wokeAt: "06:45",
+        hours: 7,
+        minutes: 30,
+        quality: "Okay",
+      });
       setSleepCheckCompleted(parsed.sleepCheckCompleted ?? false);
-      setQuoteIndex(parsed.quoteIndex);
-      setQuoteFeedback(parsed.quoteFeedback);
+      setQuoteIndex(parsed.quoteIndex ?? 0);
+      setQuoteFeedback(parsed.quoteFeedback ?? null);
       setIsReady(true);
     } catch {
-      localStorage.removeItem("daily-health-companion");
-      window.location.href = "/onboarding";
+      localStorage.removeItem(storageKey);
+      if (options?.redirectIfMissing) window.location.href = "/onboarding";
     }
-  }, []);
+  }
 
   useEffect(() => {
     if (!isReady) return;
 
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const snapshot = {
-      date: todayKey,
+    void saveHealthStateWithHistory({
       profile,
+      onboardingCompleted: true,
       meals,
       water,
       sleep,
       sleepCheckCompleted,
       quoteIndex,
       quoteFeedback,
-      updatedAt: new Date().toISOString(),
-    };
-
-    localStorage.setItem(
-      "daily-health-companion",
-      JSON.stringify({
-        profile,
-        onboardingCompleted: true,
-        meals,
-        water,
-        sleep,
-        sleepCheckCompleted,
-        quoteIndex,
-        quoteFeedback,
-      }),
-    );
-
-    try {
-      const savedHistory = localStorage.getItem("daily-health-history");
-      const history = savedHistory
-        ? (JSON.parse(savedHistory) as typeof snapshot[])
-        : [];
-      const nextHistory = [
-        snapshot,
-        ...history.filter((day) => day.date !== todayKey),
-      ].slice(0, 30);
-      localStorage.setItem("daily-health-history", JSON.stringify(nextHistory));
-    } catch {
-      localStorage.setItem("daily-health-history", JSON.stringify([snapshot]));
-    }
+    });
   }, [isReady, profile, meals, water, sleep, sleepCheckCompleted, quoteIndex, quoteFeedback]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    void scheduleTodayLocalMealReminders(meals);
+  }, [isReady, meals]);
 
   const activeMealLog = meals.find((meal) => meal.type === activeMeal) ?? meals[0];
   const loggedMeals = meals.filter((meal) => meal.status === "logged").length;
@@ -306,23 +341,20 @@ export default function HomePage() {
   }
 
   async function enableNotifications() {
-    if (!("Notification" in window)) {
-      setNotificationStatus("Browser notifications are not supported here");
-      return;
-    }
+    const result = await enablePushNotifications();
+    const labels: Record<typeof result, string> = {
+      blocked: "Blocked",
+      enabled: "Push enabled",
+      "not-configured": "Setup needed",
+      "signed-out": "Sign in first",
+      unsupported: "Unsupported",
+    };
+    setNotificationStatus(labels[result]);
+  }
 
-    const result = await Notification.requestPermission();
-    setNotificationStatus(result === "granted" ? "Enabled" : "Blocked");
-
-    if (result === "granted") {
-      const notification = new Notification("Is this your lunch time?", {
-        body: "Tap here to open the lunch check-in and capture your meal.",
-      });
-      notification.onclick = () => {
-        window.focus();
-        window.location.href = "/meal/lunch";
-      };
-    }
+  async function sendTestNotification() {
+    const result = await sendTestPushNotification();
+    setNotificationStatus(result === "sent" ? "Test sent" : "Enable first");
   }
 
   function rescheduleMeal(type: MealType, minutes: number) {
@@ -373,12 +405,17 @@ export default function HomePage() {
                 <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
                   Good morning, {profile.name}
                 </h1>
+                {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
               </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button className="bg-white/65 backdrop-blur" variant="outline" onClick={enableNotifications}>
                 <Bell />
                 {notificationStatus}
+              </Button>
+              <Button className="bg-white/65 backdrop-blur" variant="outline" onClick={sendTestNotification}>
+                <Bell />
+                Test push
               </Button>
               <Button asChild className="bg-white/65 backdrop-blur" variant="outline">
                 <Link href="/meal/lunch">
@@ -398,9 +435,19 @@ export default function HomePage() {
                   Profile
                 </Link>
               </Button>
+              <Button asChild className="bg-white/65 backdrop-blur" variant="outline">
+                <Link href="/admin">
+                  <Shield />
+                  Admin
+                </Link>
+              </Button>
               <Button className="bg-zinc-950 text-white hover:bg-zinc-800" variant="secondary" onClick={resetToday}>
                 <TimerReset />
                 Reset today
+              </Button>
+              <Button className="bg-white/65 backdrop-blur" variant="outline" onClick={() => void signOut()}>
+                <LogOut />
+                Sign out
               </Button>
             </div>
           </div>
@@ -507,27 +554,56 @@ export default function HomePage() {
             )}
           </Card>
 
-          <Tabs defaultValue="meals" className="w-full">
-            <TabsList className="grid h-auto w-full grid-cols-4 border border-white/50 bg-white/45 backdrop-blur-xl">
-              <TabsTrigger value="meals">
-                <Utensils className="mr-2 h-4 w-4" />
-                Meals
-              </TabsTrigger>
-              <TabsTrigger value="water">
-                <Droplets className="mr-2 h-4 w-4" />
-                Water
-              </TabsTrigger>
-              <TabsTrigger value="sleep">
-                <Moon className="mr-2 h-4 w-4" />
-                Sleep
-              </TabsTrigger>
-              <TabsTrigger value="summary">
-                <Home className="mr-2 h-4 w-4" />
-                Review
-              </TabsTrigger>
-            </TabsList>
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Utensils className="h-5 w-5" />
+                    Today&apos;s check-in
+                  </CardTitle>
+                  <CardDescription>
+                    Expand this to log meals, water, sleep, and your end-of-day review.
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-expanded={expandedSections.todaysCheckIn}
+                  title={expandedSections.todaysCheckIn ? "Collapse" : "Expand"}
+                  onClick={() => toggleSection("todaysCheckIn")}
+                >
+                  <ChevronDown
+                    className={`transition-transform ${
+                      expandedSections.todaysCheckIn ? "rotate-180" : ""
+                    }`}
+                  />
+                </Button>
+              </div>
+            </CardHeader>
+            {expandedSections.todaysCheckIn && (
+              <CardContent>
+                <Tabs defaultValue="meals" className="w-full">
+                  <TabsList className="grid h-auto w-full grid-cols-4 border border-white/50 bg-white/45 backdrop-blur-xl">
+                    <TabsTrigger value="meals">
+                      <Utensils className="mr-2 h-4 w-4" />
+                      Meals
+                    </TabsTrigger>
+                    <TabsTrigger value="water">
+                      <Droplets className="mr-2 h-4 w-4" />
+                      Water
+                    </TabsTrigger>
+                    <TabsTrigger value="sleep">
+                      <Moon className="mr-2 h-4 w-4" />
+                      Sleep
+                    </TabsTrigger>
+                    <TabsTrigger value="summary">
+                      <Home className="mr-2 h-4 w-4" />
+                      Review
+                    </TabsTrigger>
+                  </TabsList>
 
-            <TabsContent value="meals">
+                  <TabsContent value="meals">
               <div className="grid gap-5 xl:grid-cols-[280px_1fr]">
                 <div className="grid gap-3">
                   {meals.map((meal) => (
@@ -908,7 +984,10 @@ export default function HomePage() {
                 </CardContent>
               </Card>
             </TabsContent>
-          </Tabs>
+                </Tabs>
+              </CardContent>
+            )}
+          </Card>
         </div>
 
         <aside className="space-y-5">

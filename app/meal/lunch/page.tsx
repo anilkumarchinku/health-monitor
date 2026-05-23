@@ -27,6 +27,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { requireSignedInUser } from "@/lib/auth";
+import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
 
 type MealLog = {
   type: "breakfast" | "lunch" | "dinner";
@@ -43,7 +45,11 @@ type MealLog = {
 type StoredAppState = {
   profile?: {
     name?: string;
+    wakeTime?: string;
+    breakfastTime?: string;
     lunchTime?: string;
+    dinnerTime?: string;
+    sleepReminder?: string;
     waterGoal?: number;
   };
   meals?: MealLog[];
@@ -61,8 +67,6 @@ type SleepLog = {
   minutes: number;
   quality: "Great" | "Okay" | "Poor";
 };
-
-const storageKey = "daily-health-companion";
 
 const fallbackLunch: MealLog = {
   type: "lunch",
@@ -100,25 +104,32 @@ export default function LunchMealPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const savedState = localStorage.getItem(storageKey);
-    if (!savedState) return;
+    async function loadMeal() {
+      const user = await requireSignedInUser();
+      if (!user) return;
 
-    try {
-      const parsed = JSON.parse(savedState) as StoredAppState;
-      const savedLunch =
-        parsed.meals?.find((meal) => meal.type === "lunch") ??
-        ({
-          ...fallbackLunch,
-          plannedTime: parsed.profile?.lunchTime ?? fallbackLunch.plannedTime,
-          actualTime: parsed.profile?.lunchTime ?? fallbackLunch.actualTime,
-        } satisfies MealLog);
-      setAppState(parsed);
-      setLunch(savedLunch);
-      setSleep(parsed.sleep ?? fallbackSleep);
-      setWaterFromPrevious(0);
-    } catch {
-      localStorage.removeItem(storageKey);
+      const savedState = localStorage.getItem(storageKey);
+      if (!savedState) return;
+
+      try {
+        const parsed = JSON.parse(savedState) as StoredAppState;
+        const savedLunch =
+          parsed.meals?.find((meal) => meal.type === "lunch") ??
+          ({
+            ...fallbackLunch,
+            plannedTime: parsed.profile?.lunchTime ?? fallbackLunch.plannedTime,
+            actualTime: parsed.profile?.lunchTime ?? fallbackLunch.actualTime,
+          } satisfies MealLog);
+        setAppState(parsed);
+        setLunch(savedLunch);
+        setSleep(parsed.sleep ?? fallbackSleep);
+        setWaterFromPrevious(0);
+      } catch {
+        localStorage.removeItem(storageKey);
+      }
     }
+
+    void loadMeal();
   }, []);
 
   useEffect(() => {
@@ -180,14 +191,14 @@ export default function LunchMealPage() {
   function saveWaterAndContinue() {
     const nextWater = (appState.water ?? 0) + waterFromPrevious;
     const nextState = { ...appState, water: nextWater };
-    localStorage.setItem(storageKey, JSON.stringify(nextState));
+    void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
     setView(nextState.sleepCheckCompleted ? "details" : "sleep");
   }
 
   function saveSleepAndContinue() {
     const nextState = { ...appState, sleep, sleepCheckCompleted: true };
-    localStorage.setItem(storageKey, JSON.stringify(nextState));
+    void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
     setView("details");
   }
@@ -214,7 +225,7 @@ export default function LunchMealPage() {
       meals,
     };
 
-    localStorage.setItem(storageKey, JSON.stringify(nextState));
+    void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
     setLunch(updatedLunch);
     setSaved(true);
@@ -239,7 +250,7 @@ export default function LunchMealPage() {
     );
     const nextState = { ...appState, meals };
 
-    localStorage.setItem(storageKey, JSON.stringify(nextState));
+    void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
     setLunch(nextLunch);
     setRescheduleMessage(
