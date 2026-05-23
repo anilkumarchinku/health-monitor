@@ -33,8 +33,10 @@ import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
 import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
 
+type MealType = "breakfast" | "lunch" | "dinner";
+
 type MealLog = {
-  type: "breakfast" | "lunch" | "dinner";
+  type: MealType;
   plannedTime: string;
   actualTime: string;
   description: string;
@@ -71,17 +73,77 @@ type SleepLog = {
   quality: "Great" | "Okay" | "Poor";
 };
 
-const fallbackLunch: MealLog = {
-  type: "lunch",
-  plannedTime: "13:00",
-  actualTime: "13:00",
-  description: "",
-  image: "",
-  hunger: 3,
-  fullness: 3,
-  notes: "",
-  status: "pending",
+const mealLabels: Record<MealType, string> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
 };
+
+const mealExamples: Record<MealType, string> = {
+  breakfast: "Example: idli, sambar, chutney, banana, and milk",
+  lunch: "Example: rice, dal, vegetables, curd, and salad",
+  dinner: "Example: chapati, curry, dal, and vegetables",
+};
+
+const defaultMealTimes: Record<MealType, string> = {
+  breakfast: "08:30",
+  lunch: "13:00",
+  dinner: "20:00",
+};
+
+function createFallbackMeal(type: MealType, time = defaultMealTimes[type]): MealLog {
+  return {
+    type,
+    plannedTime: time,
+    actualTime: time,
+    description: "",
+    image: "",
+    hunger: 3,
+    fullness: 3,
+    notes: "",
+    status: "pending",
+  };
+}
+
+const fallbackMeal = createFallbackMeal("lunch");
+
+function getProfileMealTime(profile: StoredAppState["profile"], type: MealType) {
+  const key = `${type}Time` as "breakfastTime" | "lunchTime" | "dinnerTime";
+  return profile?.[key] ?? defaultMealTimes[type];
+}
+
+function createDefaultMeals(profile: StoredAppState["profile"]) {
+  return (["breakfast", "lunch", "dinner"] as MealType[]).map((type) =>
+    createFallbackMeal(type, getProfileMealTime(profile, type)),
+  );
+}
+
+function minutesFromTime(time: string) {
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function selectMealTypeForNow(meals: MealLog[], profile: StoredAppState["profile"]): MealType {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const times = Object.fromEntries(
+    (["breakfast", "lunch", "dinner"] as MealType[]).map((type) => {
+      const meal = meals.find((item) => item.type === type);
+      return [type, minutesFromTime(meal?.plannedTime ?? getProfileMealTime(profile, type))];
+    }),
+  ) as Record<MealType, number>;
+
+  if (currentMinutes >= times.dinner) return "dinner";
+  if (currentMinutes >= times.lunch) return "lunch";
+  return "breakfast";
+}
+
+function mergeMealList(savedMeals: MealLog[] | undefined, profile: StoredAppState["profile"]) {
+  return createDefaultMeals(profile).map((defaultMeal) => {
+    const savedMeal = savedMeals?.find((meal) => meal.type === defaultMeal.type);
+    return savedMeal ? { ...defaultMeal, ...savedMeal } : defaultMeal;
+  });
+}
 
 const fallbackSleep: SleepLog = {
   sleptAt: "23:15",
@@ -98,7 +160,8 @@ export default function LunchMealPage() {
   const streamRef = useRef<MediaStream | null>(null);
 
   const [appState, setAppState] = useState<StoredAppState>({});
-  const [lunch, setLunch] = useState<MealLog>(fallbackLunch);
+  const [activeMealType, setActiveMealType] = useState<MealType>("lunch");
+  const [meal, setMeal] = useState<MealLog>(fallbackMeal);
   const [sleep, setSleep] = useState<SleepLog>(fallbackSleep);
   const [view, setView] = useState<"prompt" | "camera" | "water" | "sleep" | "details">("prompt");
   const [cameraState, setCameraState] = useState<"idle" | "active" | "blocked">("idle");
@@ -113,19 +176,21 @@ export default function LunchMealPage() {
       if (!user) return;
 
       const savedState = localStorage.getItem(storageKey);
-      if (!savedState) return;
+      if (!savedState) {
+        const mealType = selectMealTypeForNow(createDefaultMeals(undefined), undefined);
+        setActiveMealType(mealType);
+        setMeal(createFallbackMeal(mealType));
+        return;
+      }
 
       try {
         const parsed = JSON.parse(savedState) as StoredAppState;
-        const savedLunch =
-          parsed.meals?.find((meal) => meal.type === "lunch") ??
-          ({
-            ...fallbackLunch,
-            plannedTime: parsed.profile?.lunchTime ?? fallbackLunch.plannedTime,
-            actualTime: parsed.profile?.lunchTime ?? fallbackLunch.actualTime,
-          } satisfies MealLog);
+        const meals = mergeMealList(parsed.meals, parsed.profile);
+        const mealType = selectMealTypeForNow(meals, parsed.profile);
+        const selectedMeal = meals.find((item) => item.type === mealType) ?? createFallbackMeal(mealType);
         setAppState(parsed);
-        setLunch(savedLunch);
+        setActiveMealType(mealType);
+        setMeal(selectedMeal);
         setSleep(parsed.sleep ?? fallbackSleep);
         setWaterFromPrevious(0);
       } catch {
@@ -182,7 +247,7 @@ export default function LunchMealPage() {
     if (!context) return;
 
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setLunch((current) => ({
+    setMeal((current) => ({
       ...current,
       image: canvas.toDataURL("image/jpeg", 0.86),
     }));
@@ -209,21 +274,16 @@ export default function LunchMealPage() {
     setView("details");
   }
 
-  function saveLunch() {
-    const updatedLunch: MealLog = {
-      ...lunch,
+  function saveMeal() {
+    const updatedMeal: MealLog = {
+      ...meal,
       status: "logged",
-      actualTime: lunch.actualTime || lunch.plannedTime,
+      actualTime: meal.actualTime || meal.plannedTime,
     };
 
-    const currentMeals = appState.meals ?? [
-      { ...fallbackLunch, type: "breakfast", plannedTime: "08:30", actualTime: "08:30" },
-      fallbackLunch,
-      { ...fallbackLunch, type: "dinner", plannedTime: "20:00", actualTime: "20:00" },
-    ];
-
-    const meals = currentMeals.map((meal) =>
-      meal.type === "lunch" ? updatedLunch : meal,
+    const currentMeals = mergeMealList(appState.meals, appState.profile);
+    const meals = currentMeals.map((item) =>
+      item.type === activeMealType ? updatedMeal : item,
     );
 
     const nextState = {
@@ -233,33 +293,29 @@ export default function LunchMealPage() {
 
     void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
-    setLunch(updatedLunch);
+    setMeal(updatedMeal);
     setSaved(true);
-    showToast("Meal has saved");
+    showToast(`${mealLabels[activeMealType]} has saved`);
   }
 
   function reschedule(minutes: number) {
-    const [hour, minute] = lunch.plannedTime.split(":").map(Number);
+    const [hour, minute] = meal.plannedTime.split(":").map(Number);
     const date = new Date();
     date.setHours(hour, minute + minutes, 0, 0);
     const plannedTime = `${String(date.getHours()).padStart(2, "0")}:${String(
       date.getMinutes(),
     ).padStart(2, "0")}`;
 
-    const nextLunch: MealLog = { ...lunch, plannedTime, status: "snoozed" };
-    const currentMeals = appState.meals ?? [
-      { ...fallbackLunch, type: "breakfast", plannedTime: "08:30", actualTime: "08:30" },
-      fallbackLunch,
-      { ...fallbackLunch, type: "dinner", plannedTime: "20:00", actualTime: "20:00" },
-    ];
-    const meals = currentMeals.map((meal) =>
-      meal.type === "lunch" ? nextLunch : meal,
+    const nextMeal: MealLog = { ...meal, plannedTime, status: "snoozed" };
+    const currentMeals = mergeMealList(appState.meals, appState.profile);
+    const meals = currentMeals.map((item) =>
+      item.type === activeMealType ? nextMeal : item,
     );
     const nextState = { ...appState, meals };
 
     void saveHealthStateWithHistory(nextState);
     setAppState(nextState);
-    setLunch(nextLunch);
+    setMeal(nextMeal);
     setRescheduleMessage(
       `Done, let's meet after ${minutes === 60 ? "1hr" : `+${minutes} min`} 😘`,
     );
@@ -269,7 +325,7 @@ export default function LunchMealPage() {
 
   function openCamera() {
     setSaved(false);
-    setLunch((current) => ({ ...current, image: "" }));
+    setMeal((current) => ({ ...current, image: "" }));
     setCameraState("idle");
     setCameraMessage("Starting camera...");
     setView("camera");
@@ -279,6 +335,8 @@ export default function LunchMealPage() {
   const currentWater = appState.water ?? 0;
   const previewWater = currentWater + waterFromPrevious;
   const waterPercent = Math.min(100, Math.round((previewWater / waterGoal) * 100));
+  const mealLabel = mealLabels[activeMealType];
+  const mealLabelLower = mealLabel.toLowerCase();
 
   if (view === "camera") {
     return (
@@ -358,7 +416,7 @@ export default function LunchMealPage() {
 
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
-      <AppNav title="Lunch check-in" />
+      <AppNav title={`${mealLabel} check-in`} />
       <section className="glass-shell mx-auto max-w-5xl rounded-lg">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -366,7 +424,7 @@ export default function LunchMealPage() {
               <BrandLogo compact />
               <div>
                 <p className="text-sm text-muted-foreground">Notification meal check-in</p>
-                <h1 className="text-2xl font-semibold tracking-normal">Lunch</h1>
+                <h1 className="text-2xl font-semibold tracking-normal">{mealLabel}</h1>
               </div>
             </div>
             <Button asChild variant="outline">
@@ -389,7 +447,7 @@ export default function LunchMealPage() {
                   Capture your meal
                 </CardTitle>
                 <CardDescription>
-                  Open the camera and take a fresh lunch photo.
+                  Open the camera and take a fresh {mealLabelLower} photo.
                 </CardDescription>
               </CardHeader>
               <CardFooter>
@@ -407,7 +465,7 @@ export default function LunchMealPage() {
                   Not your meal time?
                 </CardTitle>
                 <CardDescription>
-                  Move the reminder and come back when lunch is ready.
+                  Move the reminder and come back when {mealLabelLower} is ready.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-3 gap-2">
@@ -430,32 +488,32 @@ export default function LunchMealPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Utensils className="h-5 w-5" />
-                Lunch info
+                {mealLabel} info
               </CardTitle>
               <CardDescription>
-                Add the lunch details after capturing the meal.
+                Add the {mealLabelLower} details after capturing the meal.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {lunch.image && (
+              {meal.image && (
                 <div className="glass-surface overflow-hidden rounded-lg">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={lunch.image}
-                    alt="Captured lunch"
+                    src={meal.image}
+                    alt={`Captured ${mealLabelLower}`}
                     className="aspect-[4/3] w-full object-cover"
                   />
                 </div>
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="description">What did you have for lunch?</Label>
+                <Label htmlFor="description">What did you have for {mealLabelLower}?</Label>
                 <Textarea
                   id="description"
-                  placeholder="Example: rice, dal, vegetables, curd, and salad"
-                  value={lunch.description}
+                  placeholder={mealExamples[activeMealType]}
+                  value={meal.description}
                   onChange={(event) => {
-                    setLunch((current) => ({ ...current, description: event.target.value }));
+                    setMeal((current) => ({ ...current, description: event.target.value }));
                     setSaved(false);
                   }}
                 />
@@ -463,14 +521,14 @@ export default function LunchMealPage() {
 
               {saved && (
                 <div className="rounded-lg border border-zinc-950/20 bg-white/70 p-3 text-sm font-medium text-zinc-950 backdrop-blur">
-                  Lunch saved. The dashboard will show this meal as logged.
+                  {mealLabel} saved. The dashboard will show this meal as logged.
                 </div>
               )}
             </CardContent>
             <CardFooter className="flex flex-col gap-2 sm:flex-row">
-              <Button className="w-full sm:w-auto" onClick={saveLunch}>
+              <Button className="w-full sm:w-auto" onClick={saveMeal}>
                 <Save />
-                Save lunch
+                Save {mealLabelLower}
               </Button>
               <Button className="w-full sm:w-auto" variant="outline" onClick={openCamera}>
                 <RotateCcw />
@@ -654,16 +712,16 @@ export default function LunchMealPage() {
                 Water check
               </CardTitle>
               <CardDescription>
-                How much water did you drink since breakfast?
+                How much water did you drink since the previous section?
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              {lunch.image && (
+              {meal.image && (
                 <div className="glass-surface overflow-hidden rounded-lg">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={lunch.image}
-                    alt="Captured lunch"
+                    src={meal.image}
+                    alt={`Captured ${mealLabelLower}`}
                     className="aspect-[4/3] w-full object-cover"
                   />
                 </div>

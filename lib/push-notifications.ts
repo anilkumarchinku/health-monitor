@@ -116,7 +116,7 @@ export async function scheduleTodayLocalMealReminders(
         silent: false,
         tag: `${meal.type}-meal-reminder`,
         data: {
-          url: meal.type === "lunch" ? "/meal/lunch" : "/",
+          url: "/meal/lunch",
         },
       };
 
@@ -156,7 +156,7 @@ export async function scheduleTodayLocalRoutineReminders({
         time: meal.plannedTime,
         title: `Is this your ${meal.type} time?`,
         body: "Tap to capture your meal and check in.",
-        url: meal.type === "lunch" ? "/meal/lunch" : "/",
+        url: "/meal/lunch",
       })),
     {
       id: "sleep",

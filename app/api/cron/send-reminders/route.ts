@@ -151,7 +151,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
       localDate: localNow.date,
       title: "Is this your breakfast time?",
       body: "Tap to log breakfast and your water from morning.",
-      url: "/",
+      url: "/meal/lunch",
     },
     {
       kind: "lunch",
@@ -167,7 +167,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
       localDate: localNow.date,
       title: "Is this your dinner time?",
       body: "Tap to log dinner and finish strong.",
-      url: "/",
+      url: "/meal/lunch",
     },
     {
       kind: "sleep",

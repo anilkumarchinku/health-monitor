@@ -672,14 +672,12 @@ export default function HomePage() {
                       >
                         Skip today
                       </Button>
-                      {activeMeal === "lunch" && (
-                        <Button asChild variant="outline">
-                          <Link href="/meal/lunch">
-                            <Camera />
-                            Open lunch camera
-                          </Link>
-                        </Button>
-                      )}
+                      <Button asChild variant="outline">
+                        <Link href="/meal/lunch">
+                          <Camera />
+                          Open smart meal camera
+                        </Link>
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -1023,7 +1021,7 @@ export default function HomePage() {
                     icon={<Utensils />}
                     title={mealLabels[meal.type]}
                     time={meal.plannedTime}
-                    href={meal.type === "lunch" ? "/meal/lunch" : undefined}
+                    href="/meal/lunch"
                   />
                 ))}
                 <TimelineItem icon={<Moon />} title="Sleep check-in" time={profile.sleepReminder} />
