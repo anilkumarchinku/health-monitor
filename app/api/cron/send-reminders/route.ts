@@ -112,6 +112,8 @@ export async function GET(request: Request) {
                 body: reminder.body,
                 url: reminder.url,
                 tag: `${reminder.localDate}-${reminder.kind}-reminder`,
+                icon: "/icon-192.png",
+                badge: "/badge-72.png",
               }),
             );
             sent += 1;

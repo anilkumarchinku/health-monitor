@@ -4,6 +4,11 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type PushStatus = "unsupported" | "blocked" | "enabled" | "signed-out" | "not-configured";
 
+type DeeNotificationOptions = NotificationOptions & {
+  vibrate?: number[];
+  badge?: string;
+};
+
 export async function enablePushNotifications(): Promise<PushStatus> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     return "unsupported";
@@ -44,11 +49,19 @@ export async function enablePushNotifications(): Promise<PushStatus> {
 
   if (error) return "not-configured";
 
-  await registration.showNotification("Notifications enabled", {
+  const enabledOptions: DeeNotificationOptions = {
     body: "I will remind you for meals, water, sleep, and confidence boosts.",
-    icon: "/icon.svg",
+    icon: "/icon-192.png",
+    badge: "/badge-72.png",
+    vibrate: [180, 90, 180],
+    silent: false,
     tag: "notifications-enabled",
-  });
+    data: {
+      url: "/",
+    },
+  };
+
+  await registration.showNotification("Notifications enabled", enabledOptions);
 
   return "enabled";
 }
@@ -95,14 +108,22 @@ export async function scheduleTodayLocalMealReminders(
     if (delay < 0 || delay > 24 * 60 * 60 * 1000) return;
 
     window.setTimeout(() => {
-      void registration.showNotification(`Is this your ${labels[meal.type] ?? "meal"} time?`, {
+      const reminderOptions: DeeNotificationOptions = {
         body: "Tap to capture your meal and check in.",
-        icon: "/icon.svg",
+        icon: "/icon-192.png",
+        badge: "/badge-72.png",
+        vibrate: [180, 90, 180],
+        silent: false,
         tag: `${meal.type}-meal-reminder`,
         data: {
           url: meal.type === "lunch" ? "/meal/lunch" : "/",
         },
-      });
+      };
+
+      void registration.showNotification(
+        `Is this your ${labels[meal.type] ?? "meal"} time?`,
+        reminderOptions,
+      );
     }, delay);
   });
 }

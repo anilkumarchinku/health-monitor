@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { ReminderSound } from "@/components/reminder-sound";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
@@ -29,7 +30,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <ReminderSound />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

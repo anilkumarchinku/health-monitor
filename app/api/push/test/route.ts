@@ -52,6 +52,8 @@ export async function POST(request: Request) {
           body: "Tap to open your meal check-in.",
           url: "/meal/lunch",
           tag: "meal-reminder-test",
+          icon: "/icon-192.png",
+          badge: "/badge-72.png",
         }),
       ),
     ),
