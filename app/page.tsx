@@ -180,6 +180,15 @@ function formatWater(amount: number) {
   return `${amount} ml`;
 }
 
+function getTimeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 5) return "Good night";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Good night";
+}
+
 export default function HomePage() {
   const showToast = useToast();
   const [isReady, setIsReady] = useState(false);
@@ -197,6 +206,7 @@ export default function HomePage() {
   const [quoteFeedback, setQuoteFeedback] = useState<QuoteFeedback>(null);
   const [sleepCheckCompleted, setSleepCheckCompleted] = useState(false);
   const [activeMeal, setActiveMeal] = useState<MealType>("breakfast");
+  const [timeGreeting, setTimeGreeting] = useState(getTimeGreeting);
   const [expandedSections, setExpandedSections] = useState({
     morningBoost: true,
     todaysCheckIn: true,
@@ -214,6 +224,11 @@ export default function HomePage() {
 
     void boot();
 
+    setTimeGreeting(getTimeGreeting());
+    const greetingTimer = window.setInterval(() => {
+      setTimeGreeting(getTimeGreeting());
+    }, 60 * 1000);
+
     function refreshFromStorage() {
       loadStoredState();
     }
@@ -229,6 +244,7 @@ export default function HomePage() {
     document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
+      window.clearInterval(greetingTimer);
       window.removeEventListener("focus", refreshFromStorage);
       window.removeEventListener("pageshow", refreshFromStorage);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
@@ -387,7 +403,11 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
-      <AppNav title={`Good morning, ${profile.name}`} onResetToday={resetToday} />
+      <AppNav
+        title={`${timeGreeting}, ${profile.name}`}
+        onResetToday={resetToday}
+        compactBrand
+      />
 
       <section className="glass-shell mx-auto mt-4 max-w-7xl rounded-lg">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">

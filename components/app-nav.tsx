@@ -27,9 +27,15 @@ type AppNavProps = {
   title?: string;
   signedIn?: boolean;
   onResetToday?: () => void;
+  compactBrand?: boolean;
 };
 
-export function AppNav({ title = "Good morning", signedIn = true, onResetToday }: AppNavProps) {
+export function AppNav({
+  title = "Good morning",
+  signedIn = true,
+  onResetToday,
+  compactBrand = false,
+}: AppNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState("Enable notifications");
 
@@ -50,7 +56,7 @@ export function AppNav({ title = "Good morning", signedIn = true, onResetToday }
         <div className="glass-shell mx-auto max-w-7xl rounded-lg">
           <div className="relative flex flex-row items-start justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-start gap-3">
-              <BrandLogo className="shrink-0" />
+              <BrandLogo className="shrink-0" compact={compactBrand} />
               <div className="min-w-0 pt-1">
                 <h1 className="truncate text-lg font-semibold leading-tight tracking-normal sm:text-2xl">
                   {title}
