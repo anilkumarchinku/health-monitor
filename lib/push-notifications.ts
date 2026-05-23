@@ -9,6 +9,12 @@ type DeeNotificationOptions = NotificationOptions & {
   badge?: string;
 };
 
+const mealLabels: Record<string, string> = {
+  breakfast: "breakfast",
+  lunch: "lunch",
+  dinner: "dinner",
+};
+
 export async function enablePushNotifications(): Promise<PushStatus> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     return "unsupported";
@@ -93,11 +99,6 @@ export async function scheduleTodayLocalMealReminders(
   if (Notification.permission !== "granted") return;
 
   const registration = await navigator.serviceWorker.ready;
-  const labels: Record<string, string> = {
-    breakfast: "breakfast",
-    lunch: "lunch",
-    dinner: "dinner",
-  };
 
   meals.forEach((meal) => {
     if (meal.status === "logged" || !meal.plannedTime) return;
@@ -121,7 +122,7 @@ export async function scheduleTodayLocalMealReminders(
       };
 
       void registration.showNotification(
-        `Is this your ${labels[meal.type] ?? "meal"} time?`,
+        `You are late for ${mealLabels[meal.type] ?? "your meal"}`,
         reminderOptions,
       );
     }, delay);
@@ -154,7 +155,7 @@ export async function scheduleTodayLocalRoutineReminders({
       .map((meal) => ({
         id: meal.type,
         time: meal.plannedTime,
-        title: `Is this your ${meal.type} time?`,
+        title: `You are late for ${mealLabels[meal.type] ?? "your meal"}`,
         body: "Tap to capture your meal and check in.",
         url: "/meal/lunch",
       })),
@@ -191,6 +192,37 @@ export async function scheduleTodayLocalRoutineReminders({
       void registration.showNotification(reminder.title, reminderOptions);
     }, delay);
   });
+}
+
+export async function scheduleMealSnoozeReminder({
+  mealType,
+  delayMinutes,
+}: {
+  mealType: string;
+  delayMinutes: number;
+}) {
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const registration = await navigator.serviceWorker.ready;
+  window.setTimeout(() => {
+    const reminderOptions: DeeNotificationOptions = {
+      body: "Tap to capture your meal and check in.",
+      icon: "/icon-192.png",
+      badge: "/badge-72.png",
+      vibrate: [180, 90, 180],
+      silent: false,
+      tag: `${mealType}-snoozed-meal-reminder`,
+      data: {
+        url: "/meal/lunch",
+      },
+    };
+
+    void registration.showNotification(
+      `You are late for ${mealLabels[mealType] ?? "your meal"}`,
+      reminderOptions,
+    );
+  }, delayMinutes * 60 * 1000);
 }
 
 function urlBase64ToUint8Array(base64String: string) {

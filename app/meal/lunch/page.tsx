@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
 import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
+import { scheduleMealSnoozeReminder } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -312,6 +313,10 @@ export default function LunchMealPage() {
     const nextState = { ...appState, meals };
 
     void saveHealthStateWithHistory(nextState);
+    void scheduleMealSnoozeReminder({
+      mealType: activeMealType,
+      delayMinutes: minutes,
+    });
     setAppState(nextState);
     setMeal(nextMeal);
     setRescheduleMessage(
