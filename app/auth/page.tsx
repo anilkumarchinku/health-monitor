@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { LogIn, UserPlus } from "lucide-react";
+import { LogIn, Mail, UserPlus } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mailLoading, setMailLoading] = useState(false);
   const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
@@ -95,6 +96,38 @@ export default function AuthPage() {
     window.location.href = "/onboarding";
   }
 
+  async function sendMagicLink() {
+    setMessage("");
+    const trimmedEmail = email.trim();
+
+    if (!supabase) {
+      setMessage("Supabase keys are missing. Add them to .env.local first.");
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setMessage("Enter your email first, then I can send the sign-in link.");
+      return;
+    }
+
+    setMailLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: trimmedEmail,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth`,
+      },
+    });
+    setMailLoading(false);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage("Sign-in link sent. Open your email and tap the link to continue.");
+    showToast("Magic link sent");
+  }
+
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6">
       <AppNav title={mode === "sign-in" ? "Welcome back" : "Create account"} signedIn={false} />
@@ -140,6 +173,19 @@ export default function AuthPage() {
                 {loading ? "Please wait" : mode === "sign-in" ? "Sign in" : "Create account"}
               </Button>
             </form>
+
+            {mode === "sign-in" && (
+              <Button
+                className="mt-3 w-full"
+                type="button"
+                variant="secondary"
+                disabled={mailLoading || loading}
+                onClick={sendMagicLink}
+              >
+                <Mail />
+                {mailLoading ? "Sending link" : "Sign in with email link"}
+              </Button>
+            )}
 
             <Button
               className="mt-3 w-full"
