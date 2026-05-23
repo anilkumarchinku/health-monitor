@@ -61,101 +61,8 @@
     opacity: 0.7;
   }
 
-  @keyframes dee-icon-float {
-    0%,
-    100% {
-      filter: drop-shadow(0 0 0 rgba(15, 23, 42, 0));
-      transform: translateY(0) rotate(0deg) scale(1);
-    }
-    25% {
-      transform: translateY(-4px) rotate(-7deg) scale(1.12);
-    }
-    60% {
-      filter: drop-shadow(0 10px 14px rgba(15, 23, 42, 0.18));
-      transform: translateY(2px) rotate(5deg) scale(0.94);
-    }
-  }
-
-  @keyframes dee-icon-sun-load {
-    0% {
-      filter: drop-shadow(0 0 0 rgba(245, 158, 11, 0));
-      transform: rotate(0deg) scale(0.78);
-    }
-    72% {
-      filter: drop-shadow(0 0 18px rgba(245, 158, 11, 0.55));
-      transform: rotate(330deg) scale(1.18);
-    }
-    100% {
-      filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3));
-      transform: rotate(360deg) scale(1);
-    }
-  }
-
-  @keyframes dee-icon-sun-glow {
-    0%,
-    100% {
-      filter: drop-shadow(0 0 7px rgba(245, 158, 11, 0.18));
-      transform: rotate(0deg) scale(1);
-    }
-    50% {
-      filter: drop-shadow(0 0 16px rgba(245, 158, 11, 0.5));
-      transform: rotate(18deg) scale(1.14);
-    }
-  }
-
-  @keyframes dee-icon-water {
-    0%,
-    100% {
-      transform: translateY(0) scaleX(1);
-    }
-    45% {
-      transform: translateY(-4px) scaleX(0.86) rotate(-4deg);
-    }
-    70% {
-      transform: translateY(2px) scaleX(1.14) rotate(4deg);
-    }
-  }
-
-  @keyframes dee-icon-sparkle {
-    0%,
-    100% {
-      filter: drop-shadow(0 0 0 rgba(250, 204, 21, 0));
-      transform: scale(1) rotate(0deg);
-    }
-    50% {
-      filter: drop-shadow(0 0 14px rgba(250, 204, 21, 0.62));
-      transform: scale(1.24) rotate(16deg);
-    }
-  }
-
-  @keyframes morning-sun-spin {
-    from {
-      transform: rotate(0deg) scale(1);
-    }
-    to {
-      transform: rotate(360deg) scale(1);
-    }
-  }
-
-  @keyframes morning-sun-pulse {
-    0%,
-    100% {
-      box-shadow:
-        0 0 0 0 rgba(245, 158, 11, 0.22),
-        0 0 12px rgba(245, 158, 11, 0.34);
-      transform: scale(1);
-    }
-    50% {
-      box-shadow:
-        0 0 0 8px rgba(245, 158, 11, 0.08),
-        0 0 22px rgba(245, 158, 11, 0.58);
-      transform: scale(1.12);
-    }
-  }
-
   .morning-sun-badge {
     align-items: center;
-    animation: morning-sun-pulse 1.5s ease-in-out infinite;
     background: rgba(253, 230, 138, 0.72);
     border: 1px solid rgba(245, 158, 11, 0.34);
     border-radius: 999px;
@@ -166,64 +73,28 @@
     width: 2rem;
   }
 
-  .morning-sun-badge::after {
-    animation: morning-sun-spin 1.15s linear infinite;
-    border: 2px dashed rgba(245, 158, 11, 0.7);
-    border-radius: 999px;
-    content: "";
-    inset: -5px;
-    position: absolute;
-  }
-
   .morning-sun-icon {
-    animation: morning-sun-spin 1.35s linear infinite !important;
+    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.28));
     position: relative;
     z-index: 1;
   }
 
   .lucide {
-    animation: dee-icon-float 2.4s ease-in-out infinite;
     transform-box: fill-box;
     transform-origin: center;
-    will-change: filter, transform;
-  }
-
-  .lucide-sun {
-    animation:
-      dee-icon-sun-load 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) both,
-      dee-icon-sun-glow 3.2s ease-in-out 1.15s infinite;
-  }
-
-  .lucide-droplets {
-    animation: dee-icon-water 1.85s ease-in-out infinite;
-  }
-
-  .lucide-sparkles {
-    animation: dee-icon-sparkle 1.9s ease-in-out infinite;
+    transition: filter 150ms ease, transform 150ms ease;
   }
 
   button:hover .lucide,
   a:hover .lucide,
-  [role="tab"]:hover .lucide,
-  .glass-surface:hover .lucide,
-  .glass-dark:hover .lucide {
-    animation-duration: 0.9s;
+  [role="tab"]:hover .lucide {
+    transform: translateY(-1px) scale(1.06);
   }
 
   button:active .lucide,
   a:active .lucide,
   [role="tab"]:active .lucide {
-    animation: none;
     transform: translateY(1px) rotate(-8deg) scale(0.9);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .lucide,
-    .morning-sun-badge,
-    .morning-sun-badge::after,
-    .morning-sun-icon {
-      animation: none;
-    }
   }
 }
 
