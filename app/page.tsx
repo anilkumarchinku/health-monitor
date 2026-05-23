@@ -418,7 +418,7 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
-      <section className="glass-shell mx-auto max-w-7xl rounded-lg">
+      <section className="glass-shell sticky top-3 z-50 mx-auto max-w-7xl rounded-lg">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <div className="relative flex flex-row items-start justify-between gap-4">
             <div className="flex items-start gap-3">
