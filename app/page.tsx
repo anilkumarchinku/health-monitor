@@ -11,7 +11,6 @@ import {
   Droplets,
   History,
   Home,
-  ImagePlus,
   LogOut,
   Menu,
   Minus,
@@ -616,15 +615,16 @@ export default function HomePage() {
 
                     <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
                       <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/40 p-4 text-center transition hover:border-primary">
-                        <ImagePlus className="h-8 w-8 text-primary" />
-                        <span className="text-sm font-medium">Upload or capture meal image</span>
+                        <Camera className="h-8 w-8 text-primary" />
+                        <span className="text-sm font-medium">Capture meal image</span>
                         <span className="text-xs text-muted-foreground">
-                          The saved preview stays visible in this app.
+                          Opens your camera for a fresh meal photo.
                         </span>
                         <Input
                           type="file"
                           accept="image/*"
                           capture="environment"
+                          aria-label="Capture meal image"
                           className="hidden"
                           onChange={(event) => handleImageUpload(activeMeal, event)}
                         />
