@@ -419,49 +419,51 @@ export default function HomePage() {
   return (
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
       <section className="glass-shell sticky top-3 z-50 mx-auto max-w-7xl rounded-lg">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="relative flex flex-row items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <BrandLogo compact />
-              <div>
-                <h1 className="text-xl font-semibold leading-tight tracking-normal sm:text-2xl">
-                  Good morning, {profile.name}
-                </h1>
-              </div>
+        <div className="relative flex flex-row items-start justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-start gap-3">
+            <BrandLogo compact />
+            <div>
+              <h1 className="text-xl font-semibold leading-tight tracking-normal sm:text-2xl">
+                Good morning, {profile.name}
+              </h1>
             </div>
-            <Button
-              className="h-11 w-11 shrink-0 bg-white/75 backdrop-blur"
-              variant="outline"
-              size="icon"
-              aria-expanded={menuOpen}
-              title={menuOpen ? "Close menu" : "Open menu"}
-              onClick={() => setMenuOpen((current) => !current)}
-            >
-              {menuOpen ? <X /> : <Menu />}
-            </Button>
-
-            {menuOpen && (
-              <div className="absolute right-0 top-14 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl">
-                <DashboardMenuButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
-                <DashboardMenuButton icon={<Bell />} label="Test push" onClick={sendTestNotification} />
-                <DashboardMenuLink icon={<Utensils />} label="Lunch page" href="/meal/lunch" />
-                <DashboardMenuLink icon={<History />} label="History" href="/history" />
-                <DashboardMenuLink icon={<User />} label="Profile" href="/profile" />
-                <DashboardMenuLink icon={<Shield />} label="Admin" href="/admin" />
-                <DashboardMenuButton
-                  icon={<TimerReset />}
-                  label="Reset today"
-                  onClick={() => {
-                    resetToday();
-                    setMenuOpen(false);
-                  }}
-                  dark
-                />
-                <DashboardMenuButton icon={<LogOut />} label="Sign out" onClick={() => void signOut()} />
-              </div>
-            )}
           </div>
+          <Button
+            className="h-11 w-11 shrink-0 bg-white/75 backdrop-blur"
+            variant="outline"
+            size="icon"
+            aria-expanded={menuOpen}
+            title={menuOpen ? "Close menu" : "Open menu"}
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            {menuOpen ? <X /> : <Menu />}
+          </Button>
 
+          {menuOpen && (
+            <div className="absolute right-4 top-16 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl sm:right-6 lg:right-8">
+              <DashboardMenuButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
+              <DashboardMenuButton icon={<Bell />} label="Test push" onClick={sendTestNotification} />
+              <DashboardMenuLink icon={<Utensils />} label="Lunch page" href="/meal/lunch" />
+              <DashboardMenuLink icon={<History />} label="History" href="/history" />
+              <DashboardMenuLink icon={<User />} label="Profile" href="/profile" />
+              <DashboardMenuLink icon={<Shield />} label="Admin" href="/admin" />
+              <DashboardMenuButton
+                icon={<TimerReset />}
+                label="Reset today"
+                onClick={() => {
+                  resetToday();
+                  setMenuOpen(false);
+                }}
+                dark
+              />
+              <DashboardMenuButton icon={<LogOut />} label="Sign out" onClick={() => void signOut()} />
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="glass-shell mx-auto mt-4 max-w-7xl rounded-lg">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
           <MorningBoostCard
             expanded={expandedSections.morningBoost}
             quote={quote}
