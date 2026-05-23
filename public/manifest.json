@@ -1,0 +1,10 @@
+{
+  "name": "Daily Health Companion",
+  "short_name": "HealthComp",
+  "description": "Meal, water, sleep, and motivation tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f5ef",
+  "theme_color": "#15736d",
+  "icons": []
+}
