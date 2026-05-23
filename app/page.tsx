@@ -13,12 +13,14 @@ import {
   Home,
   ImagePlus,
   LogOut,
+  Menu,
   Minus,
   Moon,
   Plus,
   Save,
   Share2,
   Shield,
+  X,
   Sparkles,
   Sun,
   ThumbsDown,
@@ -201,6 +203,7 @@ export default function HomePage() {
   const [quoteFeedback, setQuoteFeedback] = useState<QuoteFeedback>(null);
   const [sleepCheckCompleted, setSleepCheckCompleted] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState("Not enabled");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activeMeal, setActiveMeal] = useState<MealType>("breakfast");
   const [expandedSections, setExpandedSections] = useState({
     morningBoost: true,
@@ -401,57 +404,49 @@ export default function HomePage() {
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
       <section className="glass-shell mx-auto max-w-7xl rounded-lg">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative flex flex-row items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <BrandLogo />
               <div>
-                <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
+                <h1 className="text-xl font-semibold tracking-normal sm:text-3xl">
                   Good morning, {profile.name}
                 </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Your day, meals, water, and sleep in one calm view.
+                </p>
               </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button className="bg-white/65 backdrop-blur" variant="outline" onClick={enableNotifications}>
-                <Bell />
-                {notificationStatus}
-              </Button>
-              <Button className="bg-white/65 backdrop-blur" variant="outline" onClick={sendTestNotification}>
-                <Bell />
-                Test push
-              </Button>
-              <Button asChild className="bg-white/65 backdrop-blur" variant="outline">
-                <Link href="/meal/lunch">
-                  <Utensils />
-                  Lunch page
-                </Link>
-              </Button>
-              <Button asChild className="bg-white/65 backdrop-blur" variant="outline">
-                <Link href="/history">
-                  <History />
-                  History
-                </Link>
-              </Button>
-              <Button asChild className="bg-white/65 backdrop-blur" variant="outline">
-                <Link href="/profile">
-                  <User />
-                  Profile
-                </Link>
-              </Button>
-              <Button asChild className="bg-white/65 backdrop-blur" variant="outline">
-                <Link href="/admin">
-                  <Shield />
-                  Admin
-                </Link>
-              </Button>
-              <Button className="bg-zinc-950 text-white hover:bg-zinc-800" variant="secondary" onClick={resetToday}>
-                <TimerReset />
-                Reset today
-              </Button>
-              <Button className="bg-white/65 backdrop-blur" variant="outline" onClick={() => void signOut()}>
-                <LogOut />
-                Sign out
-              </Button>
-            </div>
+            <Button
+              className="h-11 w-11 shrink-0 bg-white/75 backdrop-blur"
+              variant="outline"
+              size="icon"
+              aria-expanded={menuOpen}
+              title={menuOpen ? "Close menu" : "Open menu"}
+              onClick={() => setMenuOpen((current) => !current)}
+            >
+              {menuOpen ? <X /> : <Menu />}
+            </Button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-14 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl">
+                <DashboardMenuButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
+                <DashboardMenuButton icon={<Bell />} label="Test push" onClick={sendTestNotification} />
+                <DashboardMenuLink icon={<Utensils />} label="Lunch page" href="/meal/lunch" />
+                <DashboardMenuLink icon={<History />} label="History" href="/history" />
+                <DashboardMenuLink icon={<User />} label="Profile" href="/profile" />
+                <DashboardMenuLink icon={<Shield />} label="Admin" href="/admin" />
+                <DashboardMenuButton
+                  icon={<TimerReset />}
+                  label="Reset today"
+                  onClick={() => {
+                    resetToday();
+                    setMenuOpen(false);
+                  }}
+                  dark
+                />
+                <DashboardMenuButton icon={<LogOut />} label="Sign out" onClick={() => void signOut()} />
+              </div>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1239,6 +1234,55 @@ function TimeField({
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} type="time" value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
+  );
+}
+
+function DashboardMenuButton({
+  icon,
+  label,
+  onClick,
+  dark = false,
+}: {
+  icon: React.ReactElement;
+  label: string;
+  onClick: () => void;
+  dark?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium transition-all active:scale-[0.98] ${
+        dark ? "bg-zinc-950 text-white hover:bg-zinc-800" : "hover:bg-zinc-100"
+      }`}
+      onClick={onClick}
+    >
+      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white/75 text-foreground shadow-sm">
+        {icon}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function DashboardMenuLink({
+  icon,
+  label,
+  href,
+}: {
+  icon: React.ReactElement;
+  label: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-all hover:bg-zinc-100 active:scale-[0.98]"
+    >
+      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white/75 text-foreground shadow-sm">
+        {icon}
+      </span>
+      {label}
+    </Link>
   );
 }
 
