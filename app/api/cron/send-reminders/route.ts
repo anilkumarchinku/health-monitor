@@ -7,6 +7,7 @@ type MealType = "breakfast" | "lunch" | "dinner";
 type HealthSnapshotRow = {
   user_id: string | null;
   profile: {
+    wakeTime?: string;
     breakfastTime?: string;
     lunchTime?: string;
     dinnerTime?: string;
@@ -28,7 +29,7 @@ type PushSubscriptionRow = {
   subscription: webpush.PushSubscription;
 };
 
-type ReminderKind = MealType | "sleep";
+type ReminderKind = MealType | "morning" | "sleep";
 
 type DueReminder = {
   kind: ReminderKind;
@@ -136,6 +137,14 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     profile[`${type}Time` as keyof typeof profile];
 
   const candidates: DueReminder[] = [
+    {
+      kind: "morning",
+      time: profile.wakeTime ?? "",
+      localDate: localNow.date,
+      title: "Good morning, sweetheart",
+      body: "Your confidence boost is ready. Tap to start the day gently.",
+      url: "/",
+    },
     {
       kind: "breakfast",
       time: mealTime("breakfast") ?? "",

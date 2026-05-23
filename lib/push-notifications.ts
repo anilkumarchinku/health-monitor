@@ -128,6 +128,71 @@ export async function scheduleTodayLocalMealReminders(
   });
 }
 
+export async function scheduleTodayLocalRoutineReminders({
+  meals,
+  wakeTime,
+  sleepReminder,
+}: {
+  meals: { type: string; plannedTime: string; status: string }[];
+  wakeTime?: string;
+  sleepReminder?: string;
+}) {
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const registration = await navigator.serviceWorker.ready;
+  const reminders = [
+    {
+      id: "morning",
+      time: wakeTime,
+      title: "Good morning, sweetheart",
+      body: "Your confidence boost is ready. Tap to start the day gently.",
+      url: "/",
+    },
+    ...meals
+      .filter((meal) => meal.status !== "logged")
+      .map((meal) => ({
+        id: meal.type,
+        time: meal.plannedTime,
+        title: `Is this your ${meal.type} time?`,
+        body: "Tap to capture your meal and check in.",
+        url: meal.type === "lunch" ? "/meal/lunch" : "/",
+      })),
+    {
+      id: "sleep",
+      time: sleepReminder,
+      title: "Sleep check-in",
+      body: "Tap to enter when you slept and protect tomorrow's energy.",
+      url: "/",
+    },
+  ];
+
+  reminders.forEach((reminder) => {
+    if (!reminder.time || !/^\d{2}:\d{2}$/.test(reminder.time)) return;
+    const [hour, minute] = reminder.time.split(":").map(Number);
+    const reminderAt = new Date();
+    reminderAt.setHours(hour, minute, 0, 0);
+    const delay = reminderAt.getTime() - Date.now();
+    if (delay < 0 || delay > 24 * 60 * 60 * 1000) return;
+
+    window.setTimeout(() => {
+      const reminderOptions: DeeNotificationOptions = {
+        body: reminder.body,
+        icon: "/icon-192.png",
+        badge: "/badge-72.png",
+        vibrate: [180, 90, 180],
+        silent: false,
+        tag: `${reminder.id}-routine-reminder`,
+        data: {
+          url: reminder.url,
+        },
+      };
+
+      void registration.showNotification(reminder.title, reminderOptions);
+    }, delay);
+  });
+}
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");

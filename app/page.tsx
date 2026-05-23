@@ -45,7 +45,7 @@ import {
   storageKey,
 } from "@/lib/health-sync";
 import {
-  scheduleTodayLocalMealReminders,
+  scheduleTodayLocalRoutineReminders,
 } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -314,8 +314,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!isReady) return;
-    void scheduleTodayLocalMealReminders(meals);
-  }, [isReady, meals]);
+    void scheduleTodayLocalRoutineReminders({
+      meals,
+      wakeTime: profile.wakeTime,
+      sleepReminder: profile.sleepReminder,
+    });
+  }, [isReady, meals, profile.sleepReminder, profile.wakeTime]);
 
   const activeMealLog = meals.find((meal) => meal.type === activeMeal) ?? meals[0];
   const loggedMeals = meals.filter((meal) => meal.status === "logged").length;

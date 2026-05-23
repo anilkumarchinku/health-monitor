@@ -82,7 +82,7 @@ create table if not exists public.reminder_deliveries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   date date not null,
-  kind text not null check (kind in ('breakfast', 'lunch', 'dinner', 'sleep')),
+  kind text not null check (kind in ('morning', 'breakfast', 'lunch', 'dinner', 'sleep')),
   delivered_at timestamptz not null default now(),
   unique (user_id, date, kind)
 );
