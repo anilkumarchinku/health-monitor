@@ -41,7 +41,7 @@ export function AppNav({
 
   async function enableNotifications() {
     const result = await enablePushNotifications();
-    setNotificationStatus(result === "enabled" ? "Notifications enabled" : "Notifications not enabled");
+    setNotificationStatus(notificationStatusLabel(result));
   }
 
   async function sendTestNotification() {
@@ -113,6 +113,15 @@ export function AppNav({
       <div className="h-[94px] sm:h-[86px]" aria-hidden />
     </>
   );
+}
+
+function notificationStatusLabel(result: Awaited<ReturnType<typeof enablePushNotifications>>) {
+  if (result === "enabled") return "Notifications enabled";
+  if (result === "ios-install-required") return "iPhone: add to Home Screen first";
+  if (result === "blocked") return "Notifications blocked";
+  if (result === "signed-out") return "Sign in first";
+  if (result === "not-configured") return "Push not configured";
+  return "Notifications unsupported";
 }
 
 function NavButton({

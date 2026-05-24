@@ -1,6 +1,7 @@
 {
   "name": "Dee Meal Monitor System",
   "short_name": "Dee Meals",
+  "id": "/?app=dee-meal-monitor",
   "description": "Meal, water, sleep, and motivation tracking.",
   "start_url": "/",
   "display": "standalone",

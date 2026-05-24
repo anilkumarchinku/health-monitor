@@ -97,6 +97,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState<Profile>(defaultProfile);
   const [notificationChoice, setNotificationChoice] = useState<"later" | "enabled" | "unset">("unset");
+  const [notificationHelp, setNotificationHelp] = useState("");
 
   useEffect(() => {
     async function boot() {
@@ -131,6 +132,11 @@ export default function OnboardingPage() {
   async function requestNotifications() {
     const result = await enablePushNotifications();
     setNotificationChoice(result === "enabled" ? "enabled" : "later");
+    if (result === "ios-install-required") {
+      setNotificationHelp("On iPhone, open Safari, tap Share, Add to Home Screen, then open Dee Meals from the icon and enable notifications there.");
+    } else {
+      setNotificationHelp("");
+    }
   }
 
   async function finishOnboarding() {
@@ -236,8 +242,13 @@ export default function OnboardingPage() {
                     <Bell className="mb-4 h-6 w-6" />
                     <p className="font-semibold">Enable notifications</p>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      The browser will ask permission now.
+                      iPhone users must open this from the Home Screen app before iOS shows permission.
                     </p>
+                    {notificationHelp && (
+                      <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                        {notificationHelp}
+                      </p>
+                    )}
                   </button>
                   <button
                     type="button"

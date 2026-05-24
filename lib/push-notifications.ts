@@ -3,7 +3,13 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getMorningQuoteText } from "@/lib/morning-quotes";
 
-type PushStatus = "unsupported" | "blocked" | "enabled" | "signed-out" | "not-configured";
+type PushStatus =
+  | "unsupported"
+  | "blocked"
+  | "enabled"
+  | "signed-out"
+  | "not-configured"
+  | "ios-install-required";
 
 type DeeNotificationOptions = NotificationOptions & {
   vibrate?: number[];
@@ -17,6 +23,10 @@ const mealLabels: Record<string, string> = {
 };
 
 export async function enablePushNotifications(): Promise<PushStatus> {
+  if (isIosDevice() && !isStandaloneApp()) {
+    return "ios-install-required";
+  }
+
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     return "unsupported";
   }
@@ -71,6 +81,17 @@ export async function enablePushNotifications(): Promise<PushStatus> {
   await registration.showNotification("Notifications enabled", enabledOptions);
 
   return "enabled";
+}
+
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
+function isStandaloneApp() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
+  );
 }
 
 export async function sendTestPushNotification() {
