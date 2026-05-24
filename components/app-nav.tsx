@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   History,
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import {
   enablePushNotifications,
+  getPushNotificationStatus,
   sendTestPushNotification,
 } from "@/lib/push-notifications";
 
@@ -38,6 +39,14 @@ export function AppNav({
 }: AppNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState("Enable notifications");
+
+  useEffect(() => {
+    if (!signedIn) return;
+
+    void getPushNotificationStatus().then((result) => {
+      setNotificationStatus(notificationStatusLabel(result));
+    });
+  }, [signedIn]);
 
   async function enableNotifications() {
     const result = await enablePushNotifications();
@@ -117,6 +126,7 @@ export function AppNav({
 
 function notificationStatusLabel(result: Awaited<ReturnType<typeof enablePushNotifications>>) {
   if (result === "enabled") return "Notifications enabled";
+  if (result === "not-enabled") return "Enable notifications";
   if (result === "ios-install-required") return "iPhone: add to Home Screen first";
   if (result === "blocked") return "Notifications blocked";
   if (result === "signed-out") return "Sign in first";

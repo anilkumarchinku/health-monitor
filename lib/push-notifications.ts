@@ -7,6 +7,7 @@ type PushStatus =
   | "unsupported"
   | "blocked"
   | "enabled"
+  | "not-enabled"
   | "signed-out"
   | "not-configured"
   | "ios-install-required";
@@ -81,6 +82,24 @@ export async function enablePushNotifications(): Promise<PushStatus> {
   await registration.showNotification("Notifications enabled", enabledOptions);
 
   return "enabled";
+}
+
+export async function getPushNotificationStatus(): Promise<PushStatus> {
+  if (isIosDevice() && !isStandaloneApp()) {
+    return "ios-install-required";
+  }
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    return "unsupported";
+  }
+
+  if (Notification.permission === "denied") return "blocked";
+  if (Notification.permission !== "granted") return "not-enabled";
+
+  const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+  const subscription = await registration?.pushManager.getSubscription();
+
+  return subscription ? "enabled" : "not-enabled";
 }
 
 function isIosDevice() {
