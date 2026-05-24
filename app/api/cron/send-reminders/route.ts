@@ -145,7 +145,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
       localDate: localNow.date,
       title: "Good morning, sweetheart",
       body: getMorningQuoteText(snapshot.quote_index ?? 0),
-      url: "/",
+      url: "/morning",
     },
     {
       kind: "breakfast",

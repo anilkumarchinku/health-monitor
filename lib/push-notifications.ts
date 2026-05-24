@@ -151,7 +151,7 @@ export async function scheduleTodayLocalRoutineReminders({
       time: wakeTime,
       title: "Good morning, sweetheart",
       body: getMorningQuoteText(quoteIndex),
-      url: "/",
+      url: "/morning",
     },
     ...meals
       .filter((meal) => meal.status !== "logged")

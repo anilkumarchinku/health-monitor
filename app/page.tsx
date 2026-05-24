@@ -185,7 +185,7 @@ export default function HomePage() {
   const [isReady, setIsReady] = useState(false);
   const [profile, setProfile] = useState<Profile>(defaultProfile);
   const [meals, setMeals] = useState<MealLog[]>(() => createMeals(defaultProfile));
-  const [water, setWater] = useState(900);
+  const [water, setWater] = useState(0);
   const [sleep, setSleep] = useState<SleepLog>({
     sleptAt: "23:15",
     wokeAt: "06:45",

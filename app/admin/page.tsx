@@ -29,9 +29,9 @@ import { requireSignedInUser } from "@/lib/auth";
 import {
   adminUsersKey,
   historyKey,
-  loadAllSupabaseSnapshots,
   storageKey,
 } from "@/lib/health-sync";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 type QuoteFeedback = "liked" | "disliked" | null;
@@ -47,6 +47,7 @@ type MealLog = {
   actualTime: string;
   description: string;
   image: string;
+  snoozeLabel?: string;
   status: "pending" | "logged" | "snoozed" | "skipped";
 };
 
@@ -134,7 +135,7 @@ export default function AdminPage() {
       adminUsers = [];
     }
 
-    const remoteDays = await loadAllSupabaseSnapshots<DaySummary>();
+    const remoteDays = await loadAdminSnapshots();
     const remoteUsers = remoteDays.reduce<Record<string, DaySummary[]>>((acc, day) => {
       const id = day.clientId ?? "supabase-user";
       acc[id] = [...(acc[id] ?? []), day];
@@ -443,6 +444,27 @@ export default function AdminPage() {
       </div>
     </main>
   );
+}
+
+async function loadAdminSnapshots() {
+  const supabase = createSupabaseBrowserClient();
+  if (!supabase) return [];
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return [];
+
+  const response = await fetch("/api/admin/snapshots", {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  });
+
+  if (!response.ok) return [];
+  const data = (await response.json()) as { snapshots?: DaySummary[] };
+
+  return data.snapshots ?? [];
 }
 
 function Metric({
