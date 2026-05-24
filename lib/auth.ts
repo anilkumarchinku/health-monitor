@@ -15,6 +15,10 @@ export async function requireSignedInUser() {
     return null;
   }
 
+  if (user.email) {
+    localStorage.setItem("sb-user-email", user.email);
+  }
+
   return user;
 }
 

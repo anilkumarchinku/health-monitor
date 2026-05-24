@@ -39,6 +39,7 @@ export function AppNav({
 }: AppNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState("Enable notifications");
+  const [showAdmin, setShowAdmin] = useState(false);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -46,6 +47,8 @@ export function AppNav({
     void getPushNotificationStatus().then((result) => {
       setNotificationStatus(notificationStatusLabel(result));
     });
+
+    setShowAdmin(isAdminBrowserUser());
   }, [signedIn]);
 
   async function enableNotifications() {
@@ -94,7 +97,7 @@ export function AppNav({
                     <NavLink icon={<Utensils />} label="Meal check-in" href="/meal/lunch" />
                     <NavLink icon={<History />} label="History" href="/history" />
                     <NavLink icon={<User />} label="Profile" href="/profile" />
-                    <NavLink icon={<Shield />} label="Admin" href="/admin" />
+                    {showAdmin && <NavLink icon={<Shield />} label="Admin" href="/admin" />}
                     {onResetToday && (
                       <NavButton
                         icon={<TimerReset />}
@@ -122,6 +125,23 @@ export function AppNav({
       <div className="h-[94px] sm:h-[86px]" aria-hidden />
     </>
   );
+}
+
+function isAdminBrowserUser() {
+  const rawEmails = process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "";
+  if (!rawEmails) return false;
+
+  try {
+    const saved = localStorage.getItem("sb-user-email");
+    const allowedEmails = rawEmails
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+
+    return Boolean(saved && allowedEmails.includes(saved.toLowerCase()));
+  } catch {
+    return false;
+  }
 }
 
 function notificationStatusLabel(result: Awaited<ReturnType<typeof enablePushNotifications>>) {

@@ -63,7 +63,7 @@ const defaultProfile: Profile = {
   lunchTime: "13:00",
   dinnerTime: "20:00",
   sleepReminder: "22:30",
-  waterGoal: 0,
+  waterGoal: 2500,
   primaryGoal: "More energy",
   timezone: "Asia/Kolkata",
 };
@@ -123,7 +123,7 @@ export default function OnboardingPage() {
     (step === 3 &&
       Boolean(profile.wakeTime) &&
       Boolean(profile.sleepReminder) &&
-      profile.waterGoal >= 0);
+      profile.waterGoal >= 500);
 
   function updateProfile<K extends keyof Profile>(key: K, value: Profile[K]) {
     setProfile((current) => ({ ...current, [key]: value }));
@@ -384,7 +384,7 @@ export default function OnboardingPage() {
                         variant="outline"
                         size="icon"
                         onClick={() =>
-                          updateProfile("waterGoal", Math.max(0, profile.waterGoal - 100))
+                          updateProfile("waterGoal", Math.max(500, profile.waterGoal - 100))
                         }
                       >
                         <Droplets className="h-4 w-4" />
@@ -392,7 +392,7 @@ export default function OnboardingPage() {
                       <Input
                         id="water"
                         type="number"
-                        min={0}
+                        min={500}
                         step={100}
                         value={profile.waterGoal}
                         onChange={(event) =>

@@ -23,6 +23,8 @@ const mealLabels: Record<string, string> = {
   dinner: "dinner",
 };
 
+const localReminderTimers = new Map<string, number>();
+
 export async function enablePushNotifications(): Promise<PushStatus> {
   if (isIosDevice() && !isStandaloneApp()) {
     return "ios-install-required";
@@ -149,7 +151,7 @@ export async function scheduleTodayLocalMealReminders(
     const delay = reminderAt.getTime() - Date.now();
     if (delay < 0 || delay > 24 * 60 * 60 * 1000) return;
 
-    window.setTimeout(() => {
+    scheduleLocalReminder(`meal-${meal.type}`, delay, () => {
       const reminderOptions: DeeNotificationOptions = {
         body: "Tap to capture your meal and check in.",
         icon: "/icon-192.png",
@@ -166,7 +168,7 @@ export async function scheduleTodayLocalMealReminders(
         `You are late for ${mealLabels[meal.type] ?? "your meal"}`,
         reminderOptions,
       );
-    }, delay);
+    });
   });
 }
 
@@ -219,7 +221,7 @@ export async function scheduleTodayLocalRoutineReminders({
     const delay = reminderAt.getTime() - Date.now();
     if (delay < 0 || delay > 24 * 60 * 60 * 1000) return;
 
-    window.setTimeout(() => {
+    scheduleLocalReminder(`routine-${reminder.id}`, delay, () => {
       const reminderOptions: DeeNotificationOptions = {
         body: reminder.body,
         icon: "/icon-192.png",
@@ -233,7 +235,7 @@ export async function scheduleTodayLocalRoutineReminders({
       };
 
       void registration.showNotification(reminder.title, reminderOptions);
-    }, delay);
+    });
   });
 }
 
@@ -248,7 +250,7 @@ export async function scheduleMealSnoozeReminder({
   if (Notification.permission !== "granted") return;
 
   const registration = await navigator.serviceWorker.ready;
-  window.setTimeout(() => {
+  scheduleLocalReminder(`snooze-${mealType}`, delayMinutes * 60 * 1000, () => {
     const reminderOptions: DeeNotificationOptions = {
       body: "Tap to capture your meal and check in.",
       icon: "/icon-192.png",
@@ -265,7 +267,21 @@ export async function scheduleMealSnoozeReminder({
       `You are late for ${mealLabels[mealType] ?? "your meal"}`,
       reminderOptions,
     );
-  }, delayMinutes * 60 * 1000);
+  });
+}
+
+function scheduleLocalReminder(key: string, delay: number, callback: () => void) {
+  const existingTimer = localReminderTimers.get(key);
+  if (existingTimer) {
+    window.clearTimeout(existingTimer);
+  }
+
+  const timer = window.setTimeout(() => {
+    localReminderTimers.delete(key);
+    callback();
+  }, delay);
+
+  localReminderTimers.set(key, timer);
 }
 
 function urlBase64ToUint8Array(base64String: string) {

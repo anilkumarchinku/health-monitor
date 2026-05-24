@@ -97,6 +97,11 @@ export async function GET(request: Request) {
       .select("id, user_id, subscription")
       .eq("user_id", snapshot.user_id);
 
+    if (!subscriptions || subscriptions.length === 0) {
+      skipped += reminders.length;
+      continue;
+    }
+
     for (const reminder of reminders) {
       const shouldSend = await reserveReminder(
         supabase,
@@ -107,6 +112,7 @@ export async function GET(request: Request) {
       );
       if (!shouldSend) continue;
 
+      let reminderSent = 0;
       await Promise.all(
         ((subscriptions ?? []) as PushSubscriptionRow[]).map(async (subscriptionRow) => {
           try {
@@ -122,11 +128,16 @@ export async function GET(request: Request) {
               }),
             );
             sent += 1;
+            reminderSent += 1;
           } catch (error) {
             failures.push(`${subscriptionRow.id}: ${error instanceof Error ? error.message : "failed"}`);
           }
         }),
       );
+
+      if (reminderSent === 0) {
+        await releaseReminder(supabase, snapshot.user_id, reminder.localDate, reminder.deliveryKey);
+      }
     }
   }
 
@@ -136,9 +147,6 @@ export async function GET(request: Request) {
 function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
-  const mealTime = (type: MealType) =>
-    snapshot.meals?.find((meal) => meal.type === type)?.plannedTime ??
-    profile[`${type}Time` as keyof typeof profile];
 
   const candidates: DueReminder[] = [
     {
@@ -150,33 +158,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
       body: getMorningQuoteText(snapshot.quote_index ?? 0),
       url: "/morning",
     },
-    {
-      kind: "breakfast",
-      time: mealTime("breakfast") ?? "",
-      deliveryKey: `breakfast-${mealTime("breakfast") ?? ""}`,
-      localDate: localNow.date,
-      title: "You are late for breakfast",
-      body: "Tap to log breakfast and your water from morning.",
-      url: "/meal/lunch",
-    },
-    {
-      kind: "lunch",
-      time: mealTime("lunch") ?? "",
-      deliveryKey: `lunch-${mealTime("lunch") ?? ""}`,
-      localDate: localNow.date,
-      title: "You are late for lunch",
-      body: "Tap to capture your lunch and check in.",
-      url: "/meal/lunch",
-    },
-    {
-      kind: "dinner",
-      time: mealTime("dinner") ?? "",
-      deliveryKey: `dinner-${mealTime("dinner") ?? ""}`,
-      localDate: localNow.date,
-      title: "You are late for dinner",
-      body: "Tap to log dinner and finish strong.",
-      url: "/meal/lunch",
-    },
+    ...getMealReminderCandidates(snapshot, profile, localNow.date),
     {
       kind: "sleep",
       time: profile.sleepReminder ?? "",
@@ -189,6 +171,46 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
   ];
 
   return candidates.filter((reminder) => isWithinCronWindow(reminder.time, localNow.minutes));
+}
+
+function getMealReminderCandidates(
+  snapshot: HealthSnapshotRow,
+  profile: NonNullable<HealthSnapshotRow["profile"]>,
+  localDate: string,
+): DueReminder[] {
+  const mealCopy: Record<MealType, { title: string; body: string }> = {
+    breakfast: {
+      title: "You are late for breakfast",
+      body: "Tap to log breakfast and your water from morning.",
+    },
+    lunch: {
+      title: "You are late for lunch",
+      body: "Tap to capture your lunch and check in.",
+    },
+    dinner: {
+      title: "You are late for dinner",
+      body: "Tap to log dinner and finish strong.",
+    },
+  };
+
+  return (["breakfast", "lunch", "dinner"] as MealType[])
+    .map((type) => {
+      const meal = snapshot.meals?.find((item) => item.type === type);
+      const time = meal?.plannedTime ?? profile[`${type}Time` as keyof typeof profile] ?? "";
+
+      return {
+        kind: type,
+        time,
+        deliveryKey: `${type}-${time}`,
+        localDate,
+        title: mealCopy[type].title,
+        body: mealCopy[type].body,
+        url: "/meal/lunch",
+        status: meal?.status,
+      };
+    })
+    .filter((reminder) => reminder.status !== "logged" && reminder.status !== "skipped")
+    .map(({ status: _status, ...reminder }) => reminder);
 }
 
 function isWithinCronWindow(time: string, currentLocalMinutes: number) {
@@ -204,15 +226,29 @@ function isWithinCronWindow(time: string, currentLocalMinutes: number) {
 }
 
 function getLocalDateParts(date: Date, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
+  let parts: Intl.DateTimeFormatPart[];
+
+  try {
+    parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+  }
 
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
   const hour = Number(value("hour"));
@@ -249,4 +285,18 @@ async function reserveReminder(
   }
 
   return !error;
+}
+
+async function releaseReminder(
+  supabase: SupabaseClient,
+  userId: string,
+  date: string,
+  deliveryKey: string,
+) {
+  await supabase
+    .from("reminder_deliveries")
+    .delete()
+    .eq("user_id", userId)
+    .eq("date", date)
+    .eq("reminder_key", deliveryKey);
 }

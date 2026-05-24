@@ -30,6 +30,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Sign in before opening admin monitoring." }, { status: 401 });
   }
 
+  if (!isAdminEmail(user.email)) {
+    return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  }
+
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
   const { data, error } = await adminClient
     .from("health_snapshots")
@@ -58,4 +62,13 @@ export async function GET(request: Request) {
   }));
 
   return NextResponse.json({ snapshots });
+}
+
+function isAdminEmail(email?: string | null) {
+  const allowedEmails = (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  return Boolean(email && allowedEmails.includes(email.toLowerCase()));
 }
