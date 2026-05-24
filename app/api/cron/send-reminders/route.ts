@@ -36,6 +36,7 @@ type ReminderKind = MealType | "morning" | "sleep";
 type DueReminder = {
   kind: ReminderKind;
   time: string;
+  deliveryKey: string;
   localDate: string;
   title: string;
   body: string;
@@ -102,6 +103,7 @@ export async function GET(request: Request) {
         snapshot.user_id,
         reminder.localDate,
         reminder.kind,
+        reminder.deliveryKey,
       );
       if (!shouldSend) continue;
 
@@ -142,6 +144,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "morning",
       time: profile.wakeTime ?? "",
+      deliveryKey: `morning-${profile.wakeTime ?? ""}`,
       localDate: localNow.date,
       title: "Good morning, sweetheart",
       body: getMorningQuoteText(snapshot.quote_index ?? 0),
@@ -150,6 +153,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "breakfast",
       time: mealTime("breakfast") ?? "",
+      deliveryKey: `breakfast-${mealTime("breakfast") ?? ""}`,
       localDate: localNow.date,
       title: "You are late for breakfast",
       body: "Tap to log breakfast and your water from morning.",
@@ -158,6 +162,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "lunch",
       time: mealTime("lunch") ?? "",
+      deliveryKey: `lunch-${mealTime("lunch") ?? ""}`,
       localDate: localNow.date,
       title: "You are late for lunch",
       body: "Tap to capture your lunch and check in.",
@@ -166,6 +171,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "dinner",
       time: mealTime("dinner") ?? "",
+      deliveryKey: `dinner-${mealTime("dinner") ?? ""}`,
       localDate: localNow.date,
       title: "You are late for dinner",
       body: "Tap to log dinner and finish strong.",
@@ -174,6 +180,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     {
       kind: "sleep",
       time: profile.sleepReminder ?? "",
+      deliveryKey: `sleep-${profile.sleepReminder ?? ""}`,
       localDate: localNow.date,
       title: "Sleep check-in",
       body: "Tap to enter when you slept and protect tomorrow's energy.",
@@ -191,7 +198,9 @@ function isWithinCronWindow(time: string, currentLocalMinutes: number) {
   const targetMinutes = hour * 60 + minute;
   const diff = currentLocalMinutes - targetMinutes;
 
-  return diff >= 0 && diff < 5;
+  const windowMinutes = Number(process.env.REMINDER_WINDOW_MINUTES ?? 10);
+
+  return diff >= 0 && diff < Math.max(1, windowMinutes);
 }
 
 function getLocalDateParts(date: Date, timezone: string) {
@@ -220,12 +229,24 @@ async function reserveReminder(
   userId: string,
   date: string,
   kind: ReminderKind,
+  deliveryKey: string,
 ) {
   const { error } = await supabase.from("reminder_deliveries").insert({
     user_id: userId,
     date,
     kind,
+    reminder_key: deliveryKey,
   });
+
+  if (error && error.message.toLowerCase().includes("reminder_key")) {
+    const { error: fallbackError } = await supabase.from("reminder_deliveries").insert({
+      user_id: userId,
+      date,
+      kind,
+    });
+
+    return !fallbackError;
+  }
 
   return !error;
 }

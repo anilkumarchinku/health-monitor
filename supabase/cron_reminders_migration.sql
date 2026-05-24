@@ -3,8 +3,9 @@ create table if not exists public.reminder_deliveries (
   user_id uuid not null references auth.users (id) on delete cascade,
   date date not null,
   kind text not null check (kind in ('morning', 'breakfast', 'lunch', 'dinner', 'sleep')),
+  reminder_key text not null default '',
   delivered_at timestamptz not null default now(),
-  unique (user_id, date, kind)
+  unique (user_id, date, reminder_key)
 );
 
 create index if not exists reminder_deliveries_user_date_idx
