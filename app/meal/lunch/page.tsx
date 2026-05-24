@@ -44,6 +44,7 @@ type MealLog = {
   fullness: number;
   notes: string;
   status: "pending" | "logged" | "snoozed" | "skipped";
+  snoozeLabel?: string;
 };
 
 type StoredAppState = {
@@ -205,6 +206,13 @@ export default function LunchMealPage() {
   }, []);
 
   useEffect(() => {
+    const clearRescheduleMessage = () => setRescheduleMessage("");
+    window.addEventListener("popstate", clearRescheduleMessage);
+
+    return () => window.removeEventListener("popstate", clearRescheduleMessage);
+  }, []);
+
+  useEffect(() => {
     if (view === "camera" && cameraState === "idle") {
       void startCamera();
     }
@@ -298,6 +306,7 @@ export default function LunchMealPage() {
   }
 
   function reschedule(minutes: number) {
+    const snoozeLabel = minutes === 60 ? "+1hr" : `+${minutes} min`;
     const [hour, minute] = meal.plannedTime.split(":").map(Number);
     const date = new Date();
     date.setHours(hour, minute + minutes, 0, 0);
@@ -305,7 +314,7 @@ export default function LunchMealPage() {
       date.getMinutes(),
     ).padStart(2, "0")}`;
 
-    const nextMeal: MealLog = { ...meal, plannedTime, status: "snoozed" };
+    const nextMeal: MealLog = { ...meal, plannedTime, status: "snoozed", snoozeLabel };
     const currentMeals = mergeMealList(appState.meals, appState.profile);
     const meals = currentMeals.map((item) =>
       item.type === activeMealType ? nextMeal : item,
@@ -319,9 +328,8 @@ export default function LunchMealPage() {
     });
     setAppState(nextState);
     setMeal(nextMeal);
-    setRescheduleMessage(
-      `Done, let's meet after ${minutes === 60 ? "+1hr" : `+${minutes} min`} 🥺`,
-    );
+    window.history.pushState({ mealRescheduled: true }, "", window.location.href);
+    setRescheduleMessage(`Done, let's meet after ${snoozeLabel} 🥺`);
     showToast(`Reminder moved by ${minutes === 60 ? "1 hour" : `${minutes} minutes`}`);
     setSaved(false);
   }
@@ -414,9 +422,9 @@ export default function LunchMealPage() {
           <div className="glass-surface overflow-hidden rounded-lg p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/reschedule-elephant.svg"
+              src="/reschedule-character.jpg"
               alt="Emotional reminder friend"
-              className="h-64 w-64 object-contain"
+              className="h-64 w-64 object-cover"
             />
           </div>
           <p className="text-3xl font-semibold leading-tight tracking-normal text-foreground sm:text-5xl">
@@ -431,6 +439,12 @@ export default function LunchMealPage() {
     <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
       <AppNav title={`${mealLabel} check-in`} />
       <div className="glass-shell mx-auto w-full max-w-3xl space-y-5 rounded-lg p-3 sm:p-5">
+        {meal.status === "snoozed" && (
+          <div className="glass-surface rounded-lg border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-center text-base font-semibold text-amber-950 shadow-soft">
+            {mealLabel} is rescheduled to {meal.snoozeLabel ?? meal.plannedTime} 🥺
+          </div>
+        )}
+
         {view === "prompt" && (
           <div className="grid gap-5 md:grid-cols-2">
             <Card>
