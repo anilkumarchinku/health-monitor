@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { SupabaseClient, createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
+import { getMorningQuoteText } from "@/lib/morning-quotes";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
 type HealthSnapshotRow = {
   user_id: string | null;
+  quote_index: number | null;
   profile: {
     wakeTime?: string;
     breakfastTime?: string;
@@ -68,7 +70,7 @@ export async function GET(request: Request) {
 
   const { data: snapshots, error: snapshotError } = await supabase
     .from("health_snapshots")
-    .select("user_id, profile, meals")
+    .select("user_id, profile, meals, quote_index")
     .not("user_id", "is", null)
     .gte("date", earliestDate);
 
@@ -142,7 +144,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
       time: profile.wakeTime ?? "",
       localDate: localNow.date,
       title: "Good morning, sweetheart",
-      body: "Your confidence boost is ready. Tap to start the day gently.",
+      body: getMorningQuoteText(snapshot.quote_index ?? 0),
       url: "/",
     },
     {

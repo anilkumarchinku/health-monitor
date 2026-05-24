@@ -1,6 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getMorningQuoteText } from "@/lib/morning-quotes";
 
 type PushStatus = "unsupported" | "blocked" | "enabled" | "signed-out" | "not-configured";
 
@@ -133,10 +134,12 @@ export async function scheduleTodayLocalRoutineReminders({
   meals,
   wakeTime,
   sleepReminder,
+  quoteIndex,
 }: {
   meals: { type: string; plannedTime: string; status: string }[];
   wakeTime?: string;
   sleepReminder?: string;
+  quoteIndex?: number;
 }) {
   if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
@@ -147,7 +150,7 @@ export async function scheduleTodayLocalRoutineReminders({
       id: "morning",
       time: wakeTime,
       title: "Good morning, sweetheart",
-      body: "Your confidence boost is ready. Tap to start the day gently.",
+      body: getMorningQuoteText(quoteIndex),
       url: "/",
     },
     ...meals

@@ -47,6 +47,7 @@ import {
 import {
   scheduleTodayLocalRoutineReminders,
 } from "@/lib/push-notifications";
+import { morningQuotes } from "@/lib/morning-quotes";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 type QuoteFeedback = "liked" | "disliked" | null;
@@ -93,52 +94,10 @@ const defaultProfile: Profile = {
   timezone: "Asia/Kolkata",
 };
 
-const quotes = [
-  {
-    text: "Strength does not come from physical capacity. It comes from an indomitable will.",
-    author: "Morning boost",
-  },
-  {
-    text: "Discipline is the bridge between goals and accomplishment.",
-    author: "Morning boost",
-  },
-  {
-    text: "Willpower is what separates the successful from the unsuccessful. Successful people strive no matter what they feel by applying their will to overcome apathy, doubt or fear.",
-    author: "Morning boost",
-  },
-  {
-    text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
-    author: "Morning boost",
-  },
-  {
-    text: "Morning is an important time of day, because how you spend your morning can often tell you what kind of day you are going to have.",
-    author: "Morning boost",
-  },
-  {
-    text: "Write it on your heart that every day is the best day in the year.",
-    author: "Morning boost",
-  },
-  {
-    text: "When you arise in the morning, think of what a precious privilege it is to be alive-to breathe, to think, to enjoy, to love.",
-    author: "Morning boost",
-  },
-  {
-    text: "The secret of getting ahead is getting started.",
-    author: "Morning boost",
-  },
-  {
-    text: "Do not wait; the time will never be 'just right.' Start where you stand, and work with whatever tools you may have at your command, and better tools will be found as you go along.",
-    author: "Morning boost",
-  },
-  {
-    text: "I attribute my success to this: I never gave or took any excuse.",
-    author: "Morning boost",
-  },
-  {
-    text: "You don't have to be great to start, but you have to start to be great.",
-    author: "Morning boost",
-  },
-];
+const quotes = morningQuotes.map((text) => ({
+  text,
+  author: "Morning boost",
+}));
 
 const mealLabels: Record<MealType, string> = {
   breakfast: "Breakfast",
@@ -350,8 +309,9 @@ export default function HomePage() {
       meals,
       wakeTime: profile.wakeTime,
       sleepReminder: profile.sleepReminder,
+      quoteIndex,
     });
-  }, [isReady, meals, profile.sleepReminder, profile.wakeTime]);
+  }, [isReady, meals, profile.sleepReminder, profile.wakeTime, quoteIndex]);
 
   const activeMealLog = meals.find((meal) => meal.type === activeMeal) ?? meals[0];
   const loggedMeals = meals.filter((meal) => meal.status === "logged").length;
