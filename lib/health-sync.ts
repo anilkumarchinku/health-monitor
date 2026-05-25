@@ -204,11 +204,19 @@ async function syncSnapshotToSupabase(snapshot: HealthSnapshot) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  await supabase.from("health_snapshots").upsert(
+  if (user && session) {
+    const synced = await syncSnapshotThroughApi(snapshot, session.access_token);
+    if (synced) return;
+  }
+
+  const { error } = await supabase.from("health_snapshots").upsert(
     {
       user_id: user?.id ?? null,
-      client_id: getClientId(),
+      client_id: user?.id ?? getClientId(),
       date: snapshot.date,
       profile: snapshot.profile ?? {},
       meals: snapshot.meals ?? [],
@@ -216,14 +224,48 @@ async function syncSnapshotToSupabase(snapshot: HealthSnapshot) {
       sleep: snapshot.sleep ?? {},
       sleep_check_completed: snapshot.sleepCheckCompleted ?? false,
       quote_index: snapshot.quoteIndex ?? 0,
-      quote_feedback: snapshot.quoteFeedback ?? null,
+      quote_feedback: stringifyValue(snapshot.quoteFeedback),
       onboarding_completed: snapshot.onboardingCompleted ?? true,
-      notification_preference: snapshot.notificationPreference ?? null,
+      notification_preference: stringifyValue(snapshot.notificationPreference),
       payload: snapshot,
       updated_at: snapshot.updatedAt ?? new Date().toISOString(),
     },
     { onConflict: user ? "user_id,date" : "client_id,date" },
   );
+
+  if (error) {
+    console.error("Health snapshot sync failed", error.message);
+  }
+}
+
+async function syncSnapshotThroughApi(snapshot: HealthSnapshot, accessToken: string) {
+  try {
+    const response = await fetch("/api/sync/snapshot", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(snapshot),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      console.error("Health snapshot API sync failed", payload?.error ?? response.statusText);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Health snapshot API sync failed", error);
+    return false;
+  }
+}
+
+function stringifyValue(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
 }
 
 function rowToSnapshot(row: SupabaseSnapshotRow): HealthSnapshot {
