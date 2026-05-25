@@ -95,6 +95,14 @@ export async function saveHealthStateWithHistory(state: HealthState) {
   await saveHealthHistory(createTodaySnapshot(state));
 }
 
+export async function syncCurrentLocalStateToSupabase() {
+  const state = readLocalState<HealthState>();
+  if (!state) return false;
+
+  await saveHealthStateWithHistory(state);
+  return true;
+}
+
 export async function loadSyncedHistory<T extends HealthSnapshot>() {
   const localHistory = readLocalHistory<T>();
   const remoteHistory = await fetchSupabaseHistory<T>();

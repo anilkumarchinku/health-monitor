@@ -2,6 +2,7 @@
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getMorningQuoteText } from "@/lib/morning-quotes";
+import { syncCurrentLocalStateToSupabase } from "@/lib/health-sync";
 
 type PushStatus =
   | "unsupported"
@@ -68,6 +69,8 @@ export async function enablePushNotifications(): Promise<PushStatus> {
   );
 
   if (error) return "not-configured";
+
+  await syncCurrentLocalStateToSupabase();
 
   const enabledOptions: DeeNotificationOptions = {
     body: "I will remind you for meals, water, sleep, and confidence boosts.",
