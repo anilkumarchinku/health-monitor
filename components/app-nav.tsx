@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
 import {
   enablePushNotifications,
+  checkNotificationDoctor,
   getPushNotificationStatus,
   sendTestPushNotification,
 } from "@/lib/push-notifications";
@@ -62,6 +63,12 @@ export function AppNav({
     setNotificationStatus(testPushStatusLabel(result));
   }
 
+  async function runNotificationDoctor() {
+    setNotificationStatus("Checking notifications");
+    const result = await checkNotificationDoctor();
+    setNotificationStatus(result);
+  }
+
   return (
     <>
       <nav className="fixed inset-x-3 top-3 z-50 sm:inset-x-5">
@@ -93,6 +100,7 @@ export function AppNav({
                   <>
                     <NavButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
                     <NavButton icon={<Bell />} label="Test push" onClick={sendTestNotification} />
+                    <NavButton icon={<Bell />} label="Check notifications" onClick={runNotificationDoctor} />
                     <NavLink icon={<Home />} label="Dashboard" href="/" />
                     <NavLink icon={<Utensils />} label="Meal check-in" href="/meal/lunch" />
                     <NavLink icon={<History />} label="History" href="/history" />

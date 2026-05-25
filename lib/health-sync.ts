@@ -96,11 +96,63 @@ export async function saveHealthStateWithHistory(state: HealthState) {
 }
 
 export async function syncCurrentLocalStateToSupabase() {
-  const state = readLocalState<HealthState>();
-  if (!state) return false;
+  const state = readLocalState<HealthState>() ?? createDefaultHealthState();
 
   await saveHealthStateWithHistory(state);
   return true;
+}
+
+function createDefaultHealthState(): HealthState {
+  const timezone =
+    typeof Intl !== "undefined"
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata"
+      : "Asia/Kolkata";
+  const profile = {
+    name: "Sweetheart",
+    wakeTime: "07:00",
+    breakfastTime: "08:30",
+    lunchTime: "13:00",
+    dinnerTime: "20:00",
+    sleepReminder: "22:30",
+    waterGoal: 2500,
+    timezone,
+  };
+
+  return {
+    onboardingCompleted: true,
+    profile,
+    meals: [
+      createDefaultMeal("breakfast", profile.breakfastTime),
+      createDefaultMeal("lunch", profile.lunchTime),
+      createDefaultMeal("dinner", profile.dinnerTime),
+    ],
+    water: 0,
+    sleep: {
+      sleptAt: "23:15",
+      wokeAt: profile.wakeTime,
+      hours: 7,
+      minutes: 30,
+      quality: "Okay",
+    },
+    sleepCheckCompleted: false,
+    quoteIndex: 0,
+    quoteFeedback: null,
+    notificationPreference: "enabled",
+  };
+}
+
+function createDefaultMeal(type: "breakfast" | "lunch" | "dinner", time: string) {
+  return {
+    type,
+    plannedTime: time,
+    actualTime: time,
+    description: "",
+    image: "",
+    hunger: 3,
+    fullness: 3,
+    notes: "",
+    status: "pending",
+  };
 }
 
 export async function loadSyncedHistory<T extends HealthSnapshot>() {

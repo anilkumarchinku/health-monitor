@@ -7,10 +7,11 @@ export async function POST(request: Request) {
   const supabaseKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 
-  if (!supabaseUrl || !supabaseKey || !vapidPublicKey || !vapidPrivateKey) {
+  if (!supabaseUrl || !supabaseKey || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey) {
     return NextResponse.json({ error: "Push notification env vars are missing." }, { status: 500 });
   }
 
@@ -32,7 +33,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in before sending a test push." }, { status: 401 });
   }
 
-  const { data, error } = await supabase
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const { data, error } = await adminClient
     .from("push_subscriptions")
     .select("id, endpoint, subscription")
     .eq("user_id", user.id);

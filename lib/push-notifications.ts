@@ -45,30 +45,38 @@ export async function enablePushNotifications(): Promise<PushStatus> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return "signed-out";
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return "signed-out";
 
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!publicKey) return "not-configured";
 
   const registration = await navigator.serviceWorker.register("/sw.js");
   const existing = await registration.pushManager.getSubscription();
-  const subscription =
-    existing ??
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
-    }));
+  if (existing) {
+    await existing.unsubscribe().catch(() => undefined);
+  }
 
-  const { error } = await supabase.from("push_subscriptions").upsert(
-    {
-      user_id: user.id,
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+
+  const subscribeResponse = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       endpoint: subscription.endpoint,
       subscription,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "endpoint" },
-  );
+    }),
+  });
 
-  if (error) return "not-configured";
+  if (!subscribeResponse.ok) return "not-configured";
 
   await syncCurrentLocalStateToSupabase();
 
@@ -158,6 +166,36 @@ export async function sendTestPushNotification() {
   if (response.status === 404 || payload?.sent === 0) return "no-subscription";
 
   return response.ok && (payload?.sent ?? 0) > 0 ? "sent" : "failed";
+}
+
+export async function checkNotificationDoctor() {
+  const supabase = createSupabaseBrowserClient();
+  if (!supabase) return "Push not configured";
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return "Sign in first";
+
+  const response = await fetch("/api/notifications/doctor", {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        ok?: boolean;
+        blockers?: string[];
+        counts?: { snapshots?: number; subscriptions?: number };
+      }
+    | null;
+
+  if (!response.ok || !payload) return "Doctor check failed";
+  if (payload.ok) return "Notifications ready";
+  if (payload.blockers?.[0]?.includes("snapshot")) return "No saved schedule";
+  if (payload.blockers?.[0]?.includes("subscription")) return "No saved device";
+  if (payload.blockers?.[0]?.includes("send window")) return "Saved, waiting for time";
+  return payload.blockers?.[0] ?? "Check notification setup";
 }
 
 export async function scheduleTodayLocalMealReminders(
