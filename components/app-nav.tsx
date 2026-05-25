@@ -59,7 +59,7 @@ export function AppNav({
   async function sendTestNotification() {
     setNotificationStatus("Sending test push");
     const result = await sendTestPushNotification();
-    setNotificationStatus(result === "sent" ? "Test push sent" : "Enable notifications first");
+    setNotificationStatus(testPushStatusLabel(result));
   }
 
   return (
@@ -152,6 +152,14 @@ function notificationStatusLabel(result: Awaited<ReturnType<typeof enablePushNot
   if (result === "signed-out") return "Sign in first";
   if (result === "not-configured") return "Push not configured";
   return "Notifications unsupported";
+}
+
+function testPushStatusLabel(result: Awaited<ReturnType<typeof sendTestPushNotification>>) {
+  if (result === "sent") return "Test push sent";
+  if (result === "no-subscription") return "Tap enable notifications again";
+  if (result === "signed-out") return "Sign in first";
+  if (result === "not-configured") return "Push not configured";
+  return "Test push failed";
 }
 
 function NavButton({

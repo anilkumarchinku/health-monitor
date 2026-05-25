@@ -101,7 +101,26 @@ export async function getPushNotificationStatus(): Promise<PushStatus> {
   const registration = await navigator.serviceWorker.getRegistration("/sw.js");
   const subscription = await registration?.pushManager.getSubscription();
 
-  return subscription ? "enabled" : "not-enabled";
+  if (!subscription) return "not-enabled";
+
+  const supabase = createSupabaseBrowserClient();
+  if (!supabase) return "not-configured";
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return "signed-out";
+
+  const { data, error } = await supabase
+    .from("push_subscriptions")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("endpoint", subscription.endpoint)
+    .limit(1);
+
+  if (error) return "not-configured";
+
+  return data?.length ? "enabled" : "not-enabled";
 }
 
 function isIosDevice() {
@@ -131,8 +150,11 @@ export async function sendTestPushNotification() {
       Authorization: `Bearer ${session.access_token}`,
     },
   });
+  const payload = (await response.json().catch(() => null)) as { sent?: number } | null;
 
-  return response.ok ? "sent" : "failed";
+  if (response.status === 404 || payload?.sent === 0) return "no-subscription";
+
+  return response.ok && (payload?.sent ?? 0) > 0 ? "sent" : "failed";
 }
 
 export async function scheduleTodayLocalMealReminders(

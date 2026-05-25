@@ -34,30 +34,56 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from("push_subscriptions")
-    .select("subscription")
+    .select("id, endpoint, subscription")
     .eq("user_id", user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  if (!data?.length) {
+    return NextResponse.json(
+      { error: "No saved push subscription. Tap enable notifications again on this device.", sent: 0 },
+      { status: 404 },
+    );
+  }
+
   webpush.setVapidDetails("mailto:hello@daily-health-companion.local", vapidPublicKey, vapidPrivateKey);
 
+  let sent = 0;
+  const failures: string[] = [];
+
   await Promise.all(
-    (data ?? []).map((row) =>
-      webpush.sendNotification(
-        row.subscription,
-        JSON.stringify({
-          title: "Meal reminder",
-          body: "Tap to open your meal check-in.",
-          url: "/meal/lunch",
-          tag: "meal-reminder-test",
-          icon: "/icon-192.png",
-          badge: "/badge-72.png",
-        }),
-      ),
-    ),
+    data.map(async (row) => {
+      try {
+        await webpush.sendNotification(
+          row.subscription,
+          JSON.stringify({
+            title: "Meal reminder",
+            body: "Tap to open your meal check-in.",
+            url: "/meal/lunch",
+            tag: "meal-reminder-test",
+            icon: "/icon-192.png",
+            badge: "/badge-72.png",
+          }),
+        );
+        sent += 1;
+      } catch (pushError) {
+        const statusCode =
+          typeof pushError === "object" && pushError && "statusCode" in pushError
+            ? Number(pushError.statusCode)
+            : undefined;
+        failures.push(`${row.endpoint.slice(0, 48)}...${statusCode ? ` (${statusCode})` : ""}`);
+      }
+    }),
   );
 
-  return NextResponse.json({ sent: data?.length ?? 0 });
+  if (sent === 0) {
+    return NextResponse.json(
+      { error: "Saved push subscription could not receive notifications.", sent, failures },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({ sent, failures });
 }
