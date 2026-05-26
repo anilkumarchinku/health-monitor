@@ -101,6 +101,7 @@ export function AppNav({
                     <NavButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
                     <NavButton icon={<Bell />} label="Test push" onClick={sendTestNotification} />
                     <NavButton icon={<Bell />} label="Check notifications" onClick={runNotificationDoctor} />
+                    <NavLink icon={<Bell />} label="Notification doctor" href="/notifications" />
                     <NavLink icon={<Home />} label="Dashboard" href="/" />
                     <NavLink icon={<Utensils />} label="Meal check-in" href="/meal/lunch" />
                     <NavLink icon={<History />} label="History" href="/history" />

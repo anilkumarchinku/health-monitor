@@ -18,6 +18,35 @@ type DeeNotificationOptions = NotificationOptions & {
   badge?: string;
 };
 
+export type NotificationDoctorReport = {
+  ok?: boolean;
+  blockers?: string[];
+  checks?: {
+    hasSnapshot?: boolean;
+    hasSubscription?: boolean;
+    hasVapid?: boolean;
+    hasDueReminderNow?: boolean;
+  };
+  counts?: {
+    snapshots?: number;
+    subscriptions?: number;
+    recentDeliveries?: number;
+  };
+  latestSnapshot?: {
+    date?: string;
+    updatedAt?: string | null;
+    localNow?: {
+      date?: string;
+      time?: string;
+      timezone?: string;
+    };
+    dueNow?: unknown[];
+  } | null;
+  subscriptions?: unknown[];
+  recentDeliveries?: unknown[];
+  error?: string;
+};
+
 const mealLabels: Record<string, string> = {
   breakfast: "breakfast",
   lunch: "lunch",
@@ -169,33 +198,34 @@ export async function sendTestPushNotification() {
 }
 
 export async function checkNotificationDoctor() {
+  const payload = await fetchNotificationDoctor();
+
+  if (!payload) return "Doctor check failed";
+  if (payload.ok) return "Notifications ready";
+  if (payload.blockers?.[0]?.includes("snapshot")) return "No saved schedule";
+  if (payload.blockers?.[0]?.includes("subscription")) return "No saved device";
+  if (payload.blockers?.[0]?.includes("send window")) return "Saved, waiting for time";
+  return payload.blockers?.[0] ?? payload.error ?? "Check notification setup";
+}
+
+export async function fetchNotificationDoctor() {
   const supabase = createSupabaseBrowserClient();
-  if (!supabase) return "Push not configured";
+  if (!supabase) return null;
 
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (!session) return "Sign in first";
+  if (!session) return { error: "Sign in first" } satisfies NotificationDoctorReport;
 
   const response = await fetch("/api/notifications/doctor", {
     headers: {
       Authorization: `Bearer ${session.access_token}`,
     },
   });
-  const payload = (await response.json().catch(() => null)) as
-    | {
-        ok?: boolean;
-        blockers?: string[];
-        counts?: { snapshots?: number; subscriptions?: number };
-      }
-    | null;
+  const payload = (await response.json().catch(() => null)) as NotificationDoctorReport | null;
 
-  if (!response.ok || !payload) return "Doctor check failed";
-  if (payload.ok) return "Notifications ready";
-  if (payload.blockers?.[0]?.includes("snapshot")) return "No saved schedule";
-  if (payload.blockers?.[0]?.includes("subscription")) return "No saved device";
-  if (payload.blockers?.[0]?.includes("send window")) return "Saved, waiting for time";
-  return payload.blockers?.[0] ?? "Check notification setup";
+  if (!payload) return null;
+  return payload;
 }
 
 export async function scheduleTodayLocalMealReminders(
