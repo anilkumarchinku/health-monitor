@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 
+type TestPushBody = {
+  endpoint?: string;
+};
+
 export async function POST(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
@@ -33,11 +37,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in before sending a test push." }, { status: 401 });
   }
 
+  const body = (await request.json().catch(() => ({}))) as TestPushBody;
+  const currentEndpoint = body.endpoint?.trim();
+
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
-  const { data, error } = await adminClient
+  let query = adminClient
     .from("push_subscriptions")
     .select("id, endpoint, subscription")
     .eq("user_id", user.id);
+
+  if (currentEndpoint) {
+    query = query.eq("endpoint", currentEndpoint);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -45,15 +58,26 @@ export async function POST(request: Request) {
 
   if (!data?.length) {
     return NextResponse.json(
-      { error: "No saved push subscription. Tap enable notifications again on this device.", sent: 0 },
+      {
+        error: currentEndpoint
+          ? "This exact device is not saved for push. Tap Enable device again on this device."
+          : "No saved push subscription. Tap enable notifications again on this device.",
+        sent: 0,
+        checkedCurrentDevice: Boolean(currentEndpoint),
+      },
       { status: 404 },
     );
   }
 
-  webpush.setVapidDetails("mailto:hello@daily-health-companion.local", vapidPublicKey, vapidPrivateKey);
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || "mailto:hello@health-monitor-amber.vercel.app",
+    vapidPublicKey,
+    vapidPrivateKey,
+  );
 
   let sent = 0;
   const failures: string[] = [];
+  const staleIds: string[] = [];
 
   await Promise.all(
     data.map(async (row) => {
@@ -75,17 +99,37 @@ export async function POST(request: Request) {
           typeof pushError === "object" && pushError && "statusCode" in pushError
             ? Number(pushError.statusCode)
             : undefined;
+        if (statusCode === 404 || statusCode === 410) {
+          staleIds.push(row.id);
+        }
         failures.push(`${row.endpoint.slice(0, 48)}...${statusCode ? ` (${statusCode})` : ""}`);
       }
     }),
   );
 
+  if (staleIds.length > 0) {
+    await adminClient.from("push_subscriptions").delete().in("id", staleIds);
+  }
+
   if (sent === 0) {
     return NextResponse.json(
-      { error: "Saved push subscription could not receive notifications.", sent, failures },
+      {
+        error: currentEndpoint
+          ? "This exact device is saved, but the push provider rejected it. Re-enable notifications on this device."
+          : "Saved push subscription could not receive notifications.",
+        sent,
+        checkedCurrentDevice: Boolean(currentEndpoint),
+        staleDeleted: staleIds.length,
+        failures,
+      },
       { status: 502 },
     );
   }
 
-  return NextResponse.json({ sent, failures });
+  return NextResponse.json({
+    sent,
+    checkedCurrentDevice: Boolean(currentEndpoint),
+    staleDeleted: staleIds.length,
+    failures,
+  });
 }

@@ -54,8 +54,14 @@ export default function NotificationsPage() {
   async function enableFreshDevice() {
     setLoading(true);
     const result = await enablePushNotifications();
+    if (result === "enabled") {
+      const testResult = await sendTestPushNotification();
+      setLoading(false);
+      await runDoctor(testResult === "sent" ? "Device saved and server push reached this device." : `Device saved, but server test result: ${testResult}`);
+      return;
+    }
     setLoading(false);
-    await runDoctor(result === "enabled" ? "Device saved for push." : `Enable result: ${result}`);
+    await runDoctor(`Enable result: ${result}`);
   }
 
   async function sendTest() {

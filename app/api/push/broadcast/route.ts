@@ -51,7 +51,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  webpush.setVapidDetails("mailto:hello@daily-health-companion.local", vapidPublicKey, vapidPrivateKey);
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || "mailto:hello@health-monitor-amber.vercel.app",
+    vapidPublicKey,
+    vapidPrivateKey,
+  );
 
   let sent = 0;
   const failures: string[] = [];

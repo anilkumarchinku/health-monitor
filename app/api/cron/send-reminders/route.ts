@@ -64,7 +64,11 @@ export async function GET(request: Request) {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
-  webpush.setVapidDetails("mailto:hello@daily-health-companion.local", vapidPublicKey, vapidPrivateKey);
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || "mailto:hello@health-monitor-amber.vercel.app",
+    vapidPublicKey,
+    vapidPrivateKey,
+  );
 
   const now = new Date();
   const earliestDate = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString().slice(0, 10);

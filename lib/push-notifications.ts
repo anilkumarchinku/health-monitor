@@ -184,11 +184,20 @@ export async function sendTestPushNotification() {
 
   if (!session) return "signed-out";
 
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+
+  if (!subscription) return "no-subscription";
+
   const response = await fetch("/api/push/test", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+    }),
   });
   const payload = (await response.json().catch(() => null)) as { sent?: number } | null;
 
