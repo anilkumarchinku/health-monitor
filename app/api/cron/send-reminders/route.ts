@@ -90,18 +90,18 @@ export async function GET(request: Request) {
     if (!snapshot.user_id) continue;
     snapshotsChecked += 1;
 
+    const { data: subscriptions } = await supabase
+      .from("push_subscriptions")
+      .select("id, user_id, subscription")
+      .eq("user_id", snapshot.user_id);
+    subscriptionsFound += subscriptions?.length ?? 0;
+
     const reminders = getDueReminders(snapshot, now);
     if (reminders.length === 0) {
       skipped += 1;
       continue;
     }
     dueReminders += reminders.length;
-
-    const { data: subscriptions } = await supabase
-      .from("push_subscriptions")
-      .select("id, user_id, subscription")
-      .eq("user_id", snapshot.user_id);
-    subscriptionsFound += subscriptions?.length ?? 0;
 
     if (!subscriptions || subscriptions.length === 0) {
       skipped += reminders.length;

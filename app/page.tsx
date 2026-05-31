@@ -365,9 +365,7 @@ export default function HomePage() {
     const meal = meals.find((item) => item.type === type);
     if (!meal) return;
 
-    const [hour, minute] = meal.plannedTime.split(":").map(Number);
-    const date = new Date();
-    date.setHours(hour, minute + minutes, 0, 0);
+    const date = new Date(Date.now() + minutes * 60 * 1000);
     const nextTime = `${String(date.getHours()).padStart(2, "0")}:${String(
       date.getMinutes(),
     ).padStart(2, "0")}`;

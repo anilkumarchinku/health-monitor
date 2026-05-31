@@ -307,9 +307,7 @@ export default function LunchMealPage() {
 
   function reschedule(minutes: number) {
     const snoozeLabel = minutes === 60 ? "+1hr" : `+${minutes} min`;
-    const [hour, minute] = meal.plannedTime.split(":").map(Number);
-    const date = new Date();
-    date.setHours(hour, minute + minutes, 0, 0);
+    const date = new Date(Date.now() + minutes * 60 * 1000);
     const plannedTime = `${String(date.getHours()).padStart(2, "0")}:${String(
       date.getMinutes(),
     ).padStart(2, "0")}`;
