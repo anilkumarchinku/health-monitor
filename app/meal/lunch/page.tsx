@@ -254,10 +254,20 @@ export default function LunchMealPage() {
     if (!context) return;
 
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setMeal((current) => ({
-      ...current,
-      image: canvas.toDataURL("image/jpeg", 0.86),
-    }));
+    const capturedImage = canvas.toDataURL("image/jpeg", 0.86);
+    const nextMeal = {
+      ...meal,
+      image: capturedImage,
+    };
+    const currentMeals = mergeMealList(appState.meals, appState.profile);
+    const meals = currentMeals.map((item) =>
+      item.type === activeMealType ? nextMeal : item,
+    );
+    const nextState = { ...appState, meals };
+
+    void saveHealthStateWithHistory(nextState);
+    setAppState(nextState);
+    setMeal(nextMeal);
     stopCamera();
     setCameraState("idle");
     setView("water");
