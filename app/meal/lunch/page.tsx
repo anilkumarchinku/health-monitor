@@ -29,7 +29,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
-import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
+import {
+  loadLatestUserSnapshot,
+  prepareLocalUserSession,
+  saveHealthStateWithHistory,
+  storageKey,
+} from "@/lib/health-sync";
 import { scheduleMealSnoozeReminder } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -48,6 +53,7 @@ type MealLog = {
 };
 
 type StoredAppState = {
+  onboardingCompleted?: boolean;
   profile?: {
     name?: string;
     wakeTime?: string;
@@ -63,6 +69,7 @@ type StoredAppState = {
   sleepCheckCompleted?: boolean;
   quoteIndex?: number;
   quoteFeedback?: unknown;
+  updatedAt?: string;
 };
 
 type SleepLog = {
@@ -153,6 +160,37 @@ const fallbackSleep: SleepLog = {
   quality: "Okay",
 };
 
+async function loadMealState() {
+  let localState: StoredAppState | null = null;
+  const savedState = localStorage.getItem(storageKey);
+
+  if (savedState) {
+    try {
+      localState = JSON.parse(savedState) as StoredAppState;
+    } catch {
+      localStorage.removeItem(storageKey);
+    }
+  }
+
+  const remoteState = await loadLatestUserSnapshot<StoredAppState & { date: string }>();
+  if (remoteState?.onboardingCompleted && isRemoteNewer(remoteState, localState)) {
+    localStorage.setItem(storageKey, JSON.stringify(remoteState));
+    return remoteState;
+  }
+
+  return localState;
+}
+
+function isRemoteNewer(remote: StoredAppState | null, local: StoredAppState | null) {
+  if (!remote) return false;
+  if (!local) return true;
+
+  const remoteTime = new Date(remote.updatedAt ?? 0).getTime();
+  const localTime = new Date(local.updatedAt ?? 0).getTime();
+
+  return remoteTime > localTime;
+}
+
 export default function LunchMealPage() {
   const showToast = useToast();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -174,28 +212,24 @@ export default function LunchMealPage() {
     async function loadMeal() {
       const user = await requireSignedInUser();
       if (!user) return;
+      prepareLocalUserSession(user.id);
 
-      const savedState = localStorage.getItem(storageKey);
-      if (!savedState) {
+      const parsed = await loadMealState();
+      if (!parsed) {
         const mealType = selectMealTypeForNow(createDefaultMeals(undefined), undefined);
         setActiveMealType(mealType);
         setMeal(createFallbackMeal(mealType));
         return;
       }
 
-      try {
-        const parsed = JSON.parse(savedState) as StoredAppState;
-        const meals = mergeMealList(parsed.meals, parsed.profile);
-        const mealType = selectMealTypeForNow(meals, parsed.profile);
-        const selectedMeal = meals.find((item) => item.type === mealType) ?? createFallbackMeal(mealType);
-        setAppState(parsed);
-        setActiveMealType(mealType);
-        setMeal(selectedMeal);
-        setSleep(parsed.sleep ?? fallbackSleep);
-        setWaterFromPrevious(0);
-      } catch {
-        localStorage.removeItem(storageKey);
-      }
+      const meals = mergeMealList(parsed.meals, parsed.profile);
+      const mealType = selectMealTypeForNow(meals, parsed.profile);
+      const selectedMeal = meals.find((item) => item.type === mealType) ?? createFallbackMeal(mealType);
+      setAppState(parsed);
+      setActiveMealType(mealType);
+      setMeal(selectedMeal);
+      setSleep(parsed.sleep ?? fallbackSleep);
+      setWaterFromPrevious(0);
     }
 
     void loadMeal();

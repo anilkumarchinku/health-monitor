@@ -114,6 +114,7 @@ type StoredHomeState = {
   sleepCheckCompleted?: boolean;
   quoteIndex?: number;
   quoteFeedback?: QuoteFeedback;
+  updatedAt?: string;
 };
 
 function createMeals(profile: Profile): MealLog[] {
@@ -180,6 +181,16 @@ function getTimeGreeting() {
   return "Good night";
 }
 
+function isRemoteNewer(remote: StoredHomeState | null, local: StoredHomeState | null) {
+  if (!remote) return false;
+  if (!local) return true;
+
+  const remoteTime = new Date(remote.updatedAt ?? 0).getTime();
+  const localTime = new Date(local.updatedAt ?? 0).getTime();
+
+  return remoteTime > localTime;
+}
+
 export default function HomePage() {
   const showToast = useToast();
   const [isReady, setIsReady] = useState(false);
@@ -244,30 +255,36 @@ export default function HomePage() {
 
   async function loadStoredState(options?: { redirectIfMissing?: boolean; syncRemote?: boolean }) {
     const saved = localStorage.getItem(storageKey);
-    if (!saved) {
-      if (options?.syncRemote) {
-        const latest = await loadLatestUserSnapshot<StoredHomeState & { date: string }>();
-        if (latest?.onboardingCompleted) {
-          localStorage.setItem(storageKey, JSON.stringify(latest));
-          applyStoredState(latest);
-          return;
-        }
+    let parsed: StoredHomeState | null = null;
+
+    if (saved) {
+      try {
+        parsed = JSON.parse(saved) as StoredHomeState;
+      } catch {
+        localStorage.removeItem(storageKey);
       }
+    }
+
+    if (options?.syncRemote) {
+      const latest = await loadLatestUserSnapshot<StoredHomeState & { date: string }>();
+      if (latest?.onboardingCompleted && isRemoteNewer(latest, parsed)) {
+        localStorage.setItem(storageKey, JSON.stringify(latest));
+        applyStoredState(latest);
+        return;
+      }
+    }
+
+    if (!parsed) {
       if (options?.redirectIfMissing) window.location.href = "/onboarding";
       return;
     }
 
-    try {
-      const parsed = JSON.parse(saved) as StoredHomeState;
-      if (!parsed.onboardingCompleted) {
-        if (options?.redirectIfMissing) window.location.href = "/onboarding";
-        return;
-      }
-      applyStoredState(parsed);
-    } catch {
-      localStorage.removeItem(storageKey);
+    if (!parsed.onboardingCompleted) {
       if (options?.redirectIfMissing) window.location.href = "/onboarding";
+      return;
     }
+
+    applyStoredState(parsed);
   }
 
   function applyStoredState(parsed: StoredHomeState) {

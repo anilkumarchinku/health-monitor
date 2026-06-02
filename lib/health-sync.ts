@@ -80,8 +80,9 @@ export function readLocalHistory<T>() {
 }
 
 export async function saveHealthState(state: HealthState) {
-  localStorage.setItem(storageKey, JSON.stringify(state));
-  await syncSnapshotToSupabase(createTodaySnapshot(state));
+  const snapshot = createTodaySnapshot(state);
+  localStorage.setItem(storageKey, JSON.stringify(snapshot));
+  await syncSnapshotToSupabase(snapshot);
 }
 
 export async function saveHealthHistory(snapshot: HealthSnapshot) {
@@ -91,8 +92,9 @@ export async function saveHealthHistory(snapshot: HealthSnapshot) {
 }
 
 export async function saveHealthStateWithHistory(state: HealthState) {
-  localStorage.setItem(storageKey, JSON.stringify(state));
-  await saveHealthHistory(createTodaySnapshot(state));
+  const snapshot = createTodaySnapshot(state);
+  localStorage.setItem(storageKey, JSON.stringify(snapshot));
+  await saveHealthHistory(snapshot);
 }
 
 export async function syncCurrentLocalStateToSupabase() {
