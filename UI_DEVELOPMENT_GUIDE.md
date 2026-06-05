@@ -10,14 +10,17 @@ The app should feel simple, calm, clear, and caring. It is not a hospital dashbo
 
 ## 2. Visual Direction
 
-The UI uses a soft iPhone-style glassmorphism direction:
+The UI uses a warm mobile wellness direction inspired by the latest reference screens:
 
-- Frosted white surfaces.
+- Cream/off-white canvas.
+- Deep green primary brand color.
+- Soft peach/brown secondary action color.
+- Frosted white and neumorphic surfaces.
 - Soft shadows.
-- Black primary actions.
-- Muted warm background.
-- Dee logo and faint background lines.
-- Rounded corners around `8px`, unless a circular icon/action is expected.
+- Large rounded cards, often `24px` to `32px`.
+- Circular score rings and water rings.
+- Pill-shaped primary actions.
+- Bottom mobile navigation.
 - Clean spacing with no crowded text.
 
 Core classes:
@@ -25,8 +28,13 @@ Core classes:
 - `glass-shell`: large page containers and main sections.
 - `glass-surface`: smaller panels, cards, timeline rows, and repeated blocks.
 - `glass-dark`: dark highlight cards.
+- `wellness-card`: primary soft rounded mobile wellness card.
+- `soft-inset`: inset neumorphic treatment for quiet controls.
+- `pill-nav`: selected mobile navigation pill.
 
-Do not overuse nested cards. A page section can be a glass shell, but cards should be for repeated items, inputs, modals, or clearly framed controls.
+Do not overuse nested cards. A page section can be a soft surface, but cards should be for repeated items, inputs, modals, or clearly framed controls.
+
+The visual target should feel closer to a premium habit/wellness mobile app than a desktop admin dashboard.
 
 ## 3. Brand Assets
 
@@ -84,6 +92,8 @@ The nav should:
 - Keep the hamburger menu accessible.
 - Keep main actions inside the hamburger when possible.
 - Avoid cluttering the page top with too much brand text.
+- On mobile, include a bottom pill navigation with Today, History, Water/Notifications, and Profile.
+- Top nav should feel like the reference: Dee logo/name on the left and notification/menu action on the right.
 
 Hamburger menu should include:
 
@@ -171,6 +181,12 @@ UI requirements:
 - Avoid repeating “Dee Meal Monitor System” in large text on the dashboard.
 - No upload option. This app supports camera capture only.
 - Sections should be collapsible where useful.
+- Use the mobile wellness layout:
+  - large greeting
+  - daily health score ring
+  - two compact Meals/Water cards
+  - Track Progress card with Capture Meal and Add Water
+  - sleep/progress cards below
 
 Acceptance checks:
 
@@ -198,6 +214,15 @@ Initial screen must show only:
 
 - Capture your meal.
 - Not your meal time?
+
+The preferred layout:
+
+- Large centered meal icon.
+- Large title such as `Time for Lunch`.
+- One soft camera card.
+- Big green `Open Camera` pill.
+- Three soft snooze tiles: `+15m`, `+30m`, `+1h`.
+- Small friendly tip pill at the bottom.
 
 Camera rules:
 

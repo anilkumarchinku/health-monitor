@@ -10,14 +10,14 @@ export function BrandLogo({ className = "", compact = false, dark = false }: Bra
       <img
         src="/icon.svg"
         alt="Dee Meal Monitor System"
-        className={`shrink-0 rounded-md ${compact ? "h-9 w-9" : "h-11 w-11"}`}
+        className={`shrink-0 rounded-full bg-white object-cover p-1 shadow-sm ${compact ? "h-11 w-11" : "h-12 w-12"}`}
       />
       {!compact && (
         <div className="leading-tight">
-          <p className={`text-lg font-extrabold tracking-normal ${dark ? "text-white" : "text-foreground"}`}>
+          <p className={`text-3xl font-bold tracking-normal ${dark ? "text-white" : "text-primary"}`}>
             Dee
           </p>
-          <p className={`text-xs font-bold uppercase tracking-wide ${dark ? "text-white/70" : "text-muted-foreground"}`}>
+          <p className={`hidden text-xs font-bold uppercase tracking-wide ${dark ? "text-white/70" : "text-muted-foreground"}`}>
             Meal Monitor System
           </p>
         </div>

@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Bell,
+  CalendarDays,
+  Droplets,
   History,
   Home,
   LogIn,
@@ -38,6 +41,7 @@ export function AppNav({
   onResetToday,
   compactBrand = false,
 }: AppNavProps) {
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState("Enable notifications");
   const [showAdmin, setShowAdmin] = useState(false);
@@ -71,20 +75,20 @@ export function AppNav({
 
   return (
     <>
-      <nav className="fixed inset-x-3 top-3 z-50 sm:inset-x-5">
-        <div className="glass-shell mx-auto max-w-7xl rounded-lg">
-          <div className="relative flex flex-row items-start justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-            <div className="flex min-w-0 items-start gap-3">
-              <BrandLogo className="shrink-0" compact={compactBrand} />
-              <div className="min-w-0 pt-1">
-                <h1 className="truncate text-lg font-semibold leading-tight tracking-normal sm:text-2xl">
+      <nav className="fixed inset-x-0 top-0 z-50 border-b border-black/5 bg-background/88 backdrop-blur-2xl">
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+          <div className="relative flex flex-row items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <BrandLogo className="shrink-0" compact={false} />
+              {compactBrand && (
+                <h1 className="hidden truncate text-base font-semibold leading-tight tracking-normal text-primary sm:block">
                   {title}
                 </h1>
-              </div>
+              )}
             </div>
 
             <Button
-              className="h-11 w-11 shrink-0 bg-white/75 backdrop-blur"
+              className="h-11 w-11 shrink-0 border-0 bg-transparent text-primary shadow-none hover:bg-white/70"
               variant="outline"
               size="icon"
               aria-expanded={menuOpen}
@@ -95,7 +99,7 @@ export function AppNav({
             </Button>
 
             {menuOpen && (
-              <div className="absolute right-4 top-16 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl sm:right-6 lg:right-8">
+              <div className="absolute right-0 top-14 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-[1.5rem] border border-white/70 bg-white/95 p-2 shadow-soft backdrop-blur-xl">
                 {signedIn ? (
                   <>
                     <NavButton icon={<Bell />} label={notificationStatus} onClick={enableNotifications} />
@@ -131,7 +135,17 @@ export function AppNav({
           </div>
         </div>
       </nav>
-      <div className="h-[94px] sm:h-[86px]" aria-hidden />
+      <div className="h-[72px]" aria-hidden />
+      {signedIn && (
+        <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-black/5 bg-white/86 px-4 py-3 backdrop-blur-2xl sm:hidden">
+          <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+            <BottomNavItem href="/" icon={<CalendarDays />} label="Today" active={pathname === "/"} />
+            <BottomNavItem href="/history" icon={<History />} label="History" active={pathname === "/history"} />
+            <BottomNavItem href="/notifications" icon={<Droplets />} label="Water" active={pathname === "/notifications"} />
+            <BottomNavItem href="/profile" icon={<User />} label="Profile" active={pathname === "/profile"} />
+          </div>
+        </nav>
+      )}
     </>
   );
 }
@@ -209,6 +223,30 @@ function NavLink({
     <Link
       href={href}
       className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-zinc-950/5 active:scale-[0.98]"
+    >
+      {icon}
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+function BottomNavItem({
+  href,
+  icon,
+  label,
+  active,
+}: {
+  href: string;
+  icon: React.ReactElement;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-full px-3 text-xs font-semibold transition ${
+        active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+      }`}
     >
       {icon}
       <span>{label}</span>

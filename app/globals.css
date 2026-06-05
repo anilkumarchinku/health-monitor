@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 42 40% 97%;
-    --foreground: 214 26% 14%;
+    --background: 28 45% 96%;
+    --foreground: 150 20% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 214 26% 14%;
+    --card-foreground: 150 20% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 214 26% 14%;
-    --primary: 222 16% 10%;
+    --popover-foreground: 150 20% 12%;
+    --primary: 146 28% 34%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 36 45% 88%;
-    --secondary-foreground: 214 26% 14%;
-    --muted: 210 20% 92%;
-    --muted-foreground: 215 12% 38%;
-    --accent: 352 68% 91%;
-    --accent-foreground: 344 50% 24%;
+    --secondary: 22 45% 91%;
+    --secondary-foreground: 18 52% 32%;
+    --muted: 34 27% 89%;
+    --muted-foreground: 145 8% 42%;
+    --accent: 139 46% 84%;
+    --accent-foreground: 146 35% 24%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 16% 84%;
-    --input: 214 16% 84%;
-    --ring: 222 16% 10%;
-    --radius: 0.5rem;
+    --border: 28 24% 88%;
+    --input: 28 24% 88%;
+    --ring: 146 28% 34%;
+    --radius: 1.5rem;
   }
 
   * {
@@ -37,19 +37,18 @@
   body {
     @apply bg-background text-foreground antialiased;
     background:
-      url("/dee-bg.svg") center 6rem / min(900px, 120vw) auto no-repeat fixed,
-      linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(226, 232, 240, 0.62)),
-      linear-gradient(45deg, transparent 0 22%, rgba(20, 184, 166, 0.08) 22% 36%, transparent 36% 100%),
-      linear-gradient(125deg, transparent 0 55%, rgba(244, 114, 182, 0.08) 55% 70%, transparent 70% 100%),
+      radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.96), transparent 28rem),
+      url("/dee-bg.svg") center 7rem / min(760px, 120vw) auto no-repeat fixed,
+      linear-gradient(180deg, hsl(28 52% 97%), hsl(26 38% 94%)),
       hsl(var(--background));
     min-height: 100vh;
   }
 
   body::before {
     background:
-      radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.65), transparent 20%),
-      linear-gradient(115deg, transparent 0 12%, rgba(255, 255, 255, 0.42) 12% 13%, transparent 13% 100%),
-      linear-gradient(72deg, transparent 0 48%, rgba(15, 23, 42, 0.05) 48% 49%, transparent 49% 100%);
+      radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.72), transparent 18rem),
+      radial-gradient(circle at 90% 48%, rgba(212, 234, 214, 0.42), transparent 20rem),
+      linear-gradient(115deg, transparent 0 12%, rgba(255, 255, 255, 0.35) 12% 13%, transparent 13% 100%);
     content: "";
     inset: 0;
     pointer-events: none;
@@ -100,14 +99,28 @@
 
 @layer components {
   .glass-shell {
-    @apply border border-white/60 bg-white/45 shadow-soft backdrop-blur-2xl;
+    @apply border border-white/70 bg-white/50 shadow-soft backdrop-blur-2xl;
   }
 
   .glass-surface {
-    @apply border border-white/55 bg-white/70 shadow-soft backdrop-blur-xl;
+    @apply border border-white/75 bg-white/65 shadow-soft backdrop-blur-xl;
   }
 
   .glass-dark {
-    @apply border border-white/15 bg-zinc-950 text-white shadow-soft;
+    @apply border border-white/15 bg-primary text-white shadow-soft;
+  }
+
+  .wellness-card {
+    @apply rounded-[2rem] border border-white/75 bg-white/70 shadow-soft backdrop-blur-xl;
+  }
+
+  .soft-inset {
+    box-shadow:
+      inset 7px 7px 16px rgba(83, 62, 44, 0.08),
+      inset -7px -7px 16px rgba(255, 255, 255, 0.78);
+  }
+
+  .pill-nav {
+    @apply rounded-full bg-primary text-primary-foreground shadow-soft;
   }
 }

@@ -448,15 +448,63 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
+    <main className="min-h-screen px-4 pb-28 pt-2 sm:px-5 sm:pb-5 sm:py-5">
       <AppNav
         title={`${timeGreeting}, ${profile.name}`}
         onResetToday={resetToday}
         compactBrand
       />
 
-      <section className="glass-shell mx-auto mt-4 max-w-7xl rounded-lg">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
+      <section className="mx-auto mt-4 max-w-7xl">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-bold tracking-normal text-primary sm:text-5xl">
+              {timeGreeting}, {profile.name}
+            </h1>
+            <p className="text-lg text-foreground/80">Ready for a calm, balanced day?</p>
+          </div>
+
+          <Card className="wellness-card mx-auto w-full max-w-md p-6 text-center">
+            <p className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Daily health score
+            </p>
+            <HealthScoreRing score={wellnessScore} />
+            <p className="mx-auto max-w-xs text-lg leading-7">
+              You&apos;re building steady habits today.
+            </p>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-5">
+            <MetricCard
+              icon={<Utensils className="h-5 w-5" />}
+              label="Meals"
+              value={`${loggedMeals}/3`}
+            />
+            <MetricCard
+              icon={<Droplets className="h-5 w-5" />}
+              label="Water"
+              value={formatWater(water)}
+            />
+          </div>
+
+          <Card className="wellness-card p-5">
+            <p className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Track progress
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <Button asChild size="lg" className="h-20 bg-[#9d5735] text-base hover:bg-[#884a2c]">
+                <Link href="/meal/lunch">
+                  <Camera />
+                  Capture Meal
+                </Link>
+              </Button>
+              <Button size="lg" className="h-20 text-base" onClick={() => setWater((current) => clamp(current + 250, 0, 6000))}>
+                <Plus />
+                Add Water
+              </Button>
+            </div>
+          </Card>
+
           <MorningBoostCard
             expanded={expandedSections.morningBoost}
             quote={quote}
@@ -468,35 +516,10 @@ export default function HomePage() {
               setQuoteFeedback(null);
             }}
           />
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              icon={<Clock className="h-4 w-4" />}
-              label="Next reminder"
-              value={nextReminder}
-              dark
-            />
-            <MetricCard
-              icon={<Utensils className="h-4 w-4" />}
-              label="Meals logged"
-              value={`${loggedMeals}/3`}
-            />
-            <MetricCard
-              icon={<Droplets className="h-4 w-4" />}
-              label="Water"
-              value={`${waterPercent}%`}
-            />
-            <MetricCard
-              icon={<Sparkles className="h-4 w-4" />}
-              label="Wellness score"
-              value={`${wellnessScore}/100`}
-              dark
-            />
-          </div>
         </div>
       </section>
 
-      <div className="glass-shell mx-auto mt-5 grid w-full max-w-7xl gap-5 rounded-lg p-3 sm:p-5 lg:grid-cols-[1fr_360px]">
+      <div className="mx-auto mt-5 grid w-full max-w-7xl gap-5 rounded-[2rem] lg:grid-cols-[1fr_360px]">
         <div className="space-y-5">
           <Card>
             <CardHeader>
@@ -1091,15 +1114,49 @@ function MetricCard({
     <div
       className={
         dark
-          ? "glass-dark rounded-lg p-4"
-          : "glass-surface rounded-lg p-4"
+          ? "glass-dark rounded-[1.75rem] p-5"
+          : "wellness-card p-5"
       }
     >
-      <div className={`flex items-center gap-2 text-sm ${dark ? "text-white/70" : "text-muted-foreground"}`}>
-        {icon}
-        {label}
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+            dark ? "bg-white/15 text-white" : "bg-accent text-primary"
+          }`}
+        >
+          {icon}
+        </div>
+        <p className={`text-base font-bold ${dark ? "text-white/70" : "text-muted-foreground"}`}>
+          {label}
+        </p>
       </div>
-      <p className="mt-2 text-lg font-semibold">{value}</p>
+      <p className={`mt-3 text-3xl font-semibold ${dark ? "text-white" : "text-primary"}`}>
+        {value}
+      </p>
+      <div className={`mt-3 h-2 overflow-hidden rounded-full ${dark ? "bg-white/20" : "bg-accent/70"}`}>
+        <div className={`h-full w-1/2 rounded-full ${dark ? "bg-white" : "bg-primary"}`} />
+      </div>
+    </div>
+  );
+}
+
+function HealthScoreRing({ score }: { score: number }) {
+  const value = clamp(score, 0, 100);
+
+  return (
+    <div
+      className="mx-auto my-7 flex h-52 w-52 items-center justify-center rounded-full"
+      style={{
+        background: `conic-gradient(hsl(var(--primary)) ${value * 3.6}deg, hsl(var(--muted)) 0deg)`,
+      }}
+      aria-label={`Daily health score ${value}`}
+    >
+      <div className="flex h-36 w-36 flex-col items-center justify-center rounded-full bg-background">
+        <p className="text-5xl font-bold text-primary">{value}</p>
+        <p className="mt-1 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+          {value >= 80 ? "Excellent" : value >= 60 ? "Balanced" : "Growing"}
+        </p>
+      </div>
     </div>
   );
 }

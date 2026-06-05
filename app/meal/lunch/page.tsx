@@ -524,57 +524,80 @@ export default function LunchMealPage() {
   }
 
   return (
-    <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
+    <main className="min-h-screen px-4 pb-28 pt-2 sm:px-5 sm:pb-5 sm:py-5">
       <AppNav title={`${mealLabel} check-in`} />
-      <div className="glass-shell mx-auto w-full max-w-3xl space-y-5 rounded-lg p-3 sm:p-5">
+      <div className="mx-auto w-full max-w-3xl space-y-7">
         {meal.status === "snoozed" && (
-          <div className="glass-surface rounded-lg border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-center text-base font-semibold text-amber-950 shadow-soft">
+          <div className="wellness-card px-4 py-3 text-center text-base font-semibold text-primary">
             {mealLabel} is rescheduled to {meal.snoozeLabel ?? meal.plannedTime} 🥺
           </div>
         )}
 
         {view === "prompt" && (
-          <div className="grid gap-5 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Camera className="h-5 w-5" />
-                  Capture your meal
-                </CardTitle>
-                <CardDescription>
-                  Open the camera and take a fresh {mealLabelLower} photo.
-                </CardDescription>
-              </CardHeader>
-              <CardFooter>
-                <Button className="w-full" onClick={openCamera} disabled={syncing}>
-                  <Camera />
-                  Open camera
-                </Button>
-              </CardFooter>
+          <div className="space-y-8 text-center">
+            <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-[2rem] bg-white text-primary shadow-soft">
+              <Utensils className="h-12 w-12" />
+            </div>
+            <div>
+              <h1 className="text-5xl font-bold tracking-normal text-foreground">
+                Time for {mealLabel}
+              </h1>
+              <p className="mx-auto mt-4 max-w-md text-xl leading-8 text-foreground/75">
+                Log your meal to stay on track with your health goals.
+              </p>
+            </div>
+
+            <Card className="wellness-card p-7">
+              <div className="relative mx-auto aspect-[16/9] max-w-lg overflow-hidden rounded-[1.75rem] bg-muted">
+                <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(70,111,83,0.24),rgba(157,87,53,0.18)),url('/reschedule-character.jpg')] bg-cover bg-center blur-[2px]" />
+                <button
+                  type="button"
+                  onClick={openCamera}
+                  disabled={syncing}
+                  className="absolute inset-0 m-auto flex h-24 w-24 items-center justify-center rounded-full bg-white text-primary shadow-soft transition active:scale-95 disabled:opacity-60"
+                  title="Open camera"
+                >
+                  <Camera className="h-10 w-10" />
+                </button>
+              </div>
+              <Button className="mt-8 h-20 w-full text-3xl" onClick={openCamera} disabled={syncing}>
+                <Camera />
+                Open Camera
+              </Button>
+              <p className="mt-6 text-lg font-bold uppercase tracking-[0.35em] text-muted-foreground">
+                Quick capture
+              </p>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <TimerReset className="h-5 w-5" />
-                  Not your meal time?
-                </CardTitle>
-                <CardDescription>
-                  Move the reminder and come back when {mealLabelLower} is ready.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-3 gap-2">
-                <Button variant="outline" size="sm" onClick={() => reschedule(15)} disabled={syncing}>
-                  +15
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => reschedule(30)} disabled={syncing}>
-                  +30
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => reschedule(60)} disabled={syncing}>
-                  +1hr
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="flex items-center gap-4">
+              <div className="h-px flex-1 bg-border" />
+              <p className="text-2xl font-medium">Not your meal time?</p>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { minutes: 15, label: "+15m", sub: "Wait" },
+                { minutes: 30, label: "+30m", sub: "Busy" },
+                { minutes: 60, label: "+1h", sub: "Later" },
+              ].map((item) => (
+                <button
+                  key={item.minutes}
+                  type="button"
+                  disabled={syncing}
+                  onClick={() => reschedule(item.minutes)}
+                  className="wellness-card flex min-h-32 flex-col items-center justify-center rounded-[1.75rem] text-primary transition active:scale-95 disabled:opacity-60"
+                >
+                  <span className="text-3xl">{item.label}</span>
+                  <span className="mt-2 text-2xl font-medium text-foreground">{item.sub}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="wellness-card flex items-center gap-4 rounded-full px-8 py-6 text-left">
+              <TimerReset className="h-5 w-5 shrink-0 text-primary" />
+              <p className="text-xl leading-8">Logging {mealLabelLower} helps maintain energy levels.</p>
+            </div>
           </div>
         )}
 
