@@ -39,6 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
 import {
+  getBrowserTimezone,
   loadLatestUserSnapshot,
   prepareLocalUserSession,
   saveHealthStateWithHistory,
@@ -91,7 +92,7 @@ const defaultProfile: Profile = {
   dinnerTime: "20:00",
   sleepReminder: "22:30",
   waterGoal: 2500,
-  timezone: "Asia/Kolkata",
+  timezone: getBrowserTimezone(),
 };
 
 const quotes = morningQuotes.map((text) => ({

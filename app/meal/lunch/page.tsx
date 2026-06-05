@@ -282,13 +282,15 @@ export default function LunchMealPage() {
     const canvas = canvasRef.current;
     if (!video || !canvas || video.videoWidth === 0) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const maxSize = 960;
+    const scale = Math.min(1, maxSize / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
     const context = canvas.getContext("2d");
     if (!context) return;
 
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const capturedImage = canvas.toDataURL("image/jpeg", 0.86);
+    const capturedImage = canvas.toDataURL("image/jpeg", 0.72);
     const nextMeal = {
       ...meal,
       image: capturedImage,

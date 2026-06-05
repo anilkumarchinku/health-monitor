@@ -3,7 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 
 type SnapshotPayload = {
   date?: string;
-  profile?: unknown;
+  profile?: {
+    timezone?: string;
+  } | unknown;
   meals?: unknown[];
   water?: number;
   sleep?: unknown;
@@ -45,7 +47,7 @@ export async function POST(request: Request) {
   }
 
   const snapshot = (await request.json()) as SnapshotPayload;
-  const date = typeof snapshot.date === "string" ? snapshot.date : new Date().toISOString().slice(0, 10);
+  const date = typeof snapshot.date === "string" ? snapshot.date : getLocalDateFromSnapshot(snapshot);
   const updatedAt = typeof snapshot.updatedAt === "string" ? snapshot.updatedAt : new Date().toISOString();
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -86,6 +88,29 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ ok: true, userId: user.id, date });
+}
+
+function getLocalDateFromSnapshot(snapshot: SnapshotPayload) {
+  const timezone =
+    typeof snapshot.profile === "object" &&
+    snapshot.profile &&
+    "timezone" in snapshot.profile &&
+    typeof snapshot.profile.timezone === "string"
+      ? snapshot.profile.timezone
+      : "UTC";
+
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+    return `${value("year")}-${value("month")}-${value("day")}`;
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
 }
 
 function stringifyValue(value: unknown) {

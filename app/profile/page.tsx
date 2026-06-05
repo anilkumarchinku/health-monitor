@@ -26,7 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
-import { saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
+import { getBrowserTimezone, saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -72,7 +72,7 @@ const defaultProfile: Profile = {
   dinnerTime: "20:00",
   sleepReminder: "22:30",
   waterGoal: 2500,
-  timezone: "Asia/Kolkata",
+  timezone: getBrowserTimezone(),
 };
 
 const mealLabels: Record<MealType, string> = {

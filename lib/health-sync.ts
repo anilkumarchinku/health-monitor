@@ -80,7 +80,7 @@ export function readLocalHistory<T>() {
 }
 
 export async function saveHealthState(state: HealthState) {
-  const snapshot = createTodaySnapshot(state);
+  const snapshot = createTodaySnapshot(normalizeStateTimezone(state));
   localStorage.setItem(storageKey, JSON.stringify(snapshot));
   await syncSnapshotToSupabase(snapshot);
 }
@@ -92,7 +92,7 @@ export async function saveHealthHistory(snapshot: HealthSnapshot) {
 }
 
 export async function saveHealthStateWithHistory(state: HealthState) {
-  const snapshot = createTodaySnapshot(state);
+  const snapshot = createTodaySnapshot(normalizeStateTimezone(state));
   localStorage.setItem(storageKey, JSON.stringify(snapshot));
   await saveHealthHistory(snapshot);
 }
@@ -105,10 +105,7 @@ export async function syncCurrentLocalStateToSupabase() {
 }
 
 function createDefaultHealthState(): HealthState {
-  const timezone =
-    typeof Intl !== "undefined"
-      ? Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata"
-      : "Asia/Kolkata";
+  const timezone = getBrowserTimezone();
   const profile = {
     name: "Sweetheart",
     wakeTime: "07:00",
@@ -205,9 +202,64 @@ export async function loadLatestUserSnapshot<T extends HealthSnapshot>() {
 function createTodaySnapshot(state: HealthState): HealthSnapshot {
   return {
     ...state,
-    date: new Date().toISOString().slice(0, 10),
+    date: getLocalDateForState(state),
     updatedAt: new Date().toISOString(),
   };
+}
+
+function normalizeStateTimezone(state: HealthState): HealthState {
+  if (!isPlainRecord(state.profile)) return state;
+
+  const browserTimezone = getBrowserTimezone();
+  const savedTimezone = typeof state.profile.timezone === "string" ? state.profile.timezone : "";
+  const shouldAutoFixTimezone =
+    !savedTimezone ||
+    savedTimezone === "UTC" ||
+    (savedTimezone === "Asia/Kolkata" && browserTimezone !== "Asia/Kolkata");
+
+  if (!shouldAutoFixTimezone) return state;
+
+  return {
+    ...state,
+    profile: {
+      ...state.profile,
+      timezone: browserTimezone,
+    },
+  };
+}
+
+function getLocalDateForState(state: HealthState) {
+  const timezone =
+    isPlainRecord(state.profile) && typeof state.profile.timezone === "string"
+      ? state.profile.timezone
+      : getBrowserTimezone();
+
+  return getLocalDate(new Date(), timezone);
+}
+
+function getLocalDate(date: Date, timezone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+    return `${value("year")}-${value("month")}-${value("day")}`;
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+export function getBrowserTimezone() {
+  return typeof Intl !== "undefined"
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata"
+    : "Asia/Kolkata";
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function mergeHistory<T extends HealthSnapshot>(snapshot: T, history: T[]) {

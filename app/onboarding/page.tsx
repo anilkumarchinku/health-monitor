@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { requireSignedInUser } from "@/lib/auth";
-import { prepareLocalUserSession, saveHealthStateWithHistory } from "@/lib/health-sync";
+import { getBrowserTimezone, prepareLocalUserSession, saveHealthStateWithHistory } from "@/lib/health-sync";
 import { enablePushNotifications } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -65,7 +65,7 @@ const defaultProfile: Profile = {
   sleepReminder: "22:30",
   waterGoal: 2500,
   primaryGoal: "More energy",
-  timezone: "Asia/Kolkata",
+  timezone: getBrowserTimezone(),
 };
 
 const goals = ["More energy", "Better sleep", "Balanced meals", "More discipline"];
