@@ -82,26 +82,25 @@ export function readLocalHistory<T>() {
 export async function saveHealthState(state: HealthState) {
   const snapshot = createTodaySnapshot(normalizeStateTimezone(state));
   localStorage.setItem(storageKey, JSON.stringify(snapshot));
-  await syncSnapshotToSupabase(snapshot);
+  return syncSnapshotToSupabase(snapshot);
 }
 
 export async function saveHealthHistory(snapshot: HealthSnapshot) {
   const nextHistory = mergeHistory(snapshot, readLocalHistory<HealthSnapshot>());
   localStorage.setItem(historyKey, JSON.stringify(nextHistory));
-  await syncSnapshotToSupabase(snapshot);
+  return syncSnapshotToSupabase(snapshot);
 }
 
 export async function saveHealthStateWithHistory(state: HealthState) {
   const snapshot = createTodaySnapshot(normalizeStateTimezone(state));
   localStorage.setItem(storageKey, JSON.stringify(snapshot));
-  await saveHealthHistory(snapshot);
+  return saveHealthHistory(snapshot);
 }
 
 export async function syncCurrentLocalStateToSupabase() {
   const state = readLocalState<HealthState>() ?? createDefaultHealthState();
 
-  await saveHealthStateWithHistory(state);
-  return true;
+  return saveHealthStateWithHistory(state);
 }
 
 function createDefaultHealthState(): HealthState {
@@ -228,7 +227,7 @@ function normalizeStateTimezone(state: HealthState): HealthState {
   };
 }
 
-function getLocalDateForState(state: HealthState) {
+export function getLocalDateForState(state: HealthState) {
   const timezone =
     isPlainRecord(state.profile) && typeof state.profile.timezone === "string"
       ? state.profile.timezone
@@ -302,10 +301,10 @@ async function fetchSupabaseHistory<T extends HealthSnapshot>() {
 }
 
 async function syncSnapshotToSupabase(snapshot: HealthSnapshot) {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) return false;
 
   const supabase = createSupabaseBrowserClient();
-  if (!supabase) return;
+  if (!supabase) return false;
 
   const {
     data: { user },
@@ -316,7 +315,7 @@ async function syncSnapshotToSupabase(snapshot: HealthSnapshot) {
 
   if (user && session) {
     const synced = await syncSnapshotThroughApi(snapshot, session.access_token);
-    if (synced) return;
+    if (synced) return true;
   }
 
   const { error } = await supabase.from("health_snapshots").upsert(
@@ -341,7 +340,10 @@ async function syncSnapshotToSupabase(snapshot: HealthSnapshot) {
 
   if (error) {
     console.error("Health snapshot sync failed", error.message);
+    return false;
   }
+
+  return true;
 }
 
 async function syncSnapshotThroughApi(snapshot: HealthSnapshot, accessToken: string) {

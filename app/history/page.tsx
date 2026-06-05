@@ -23,7 +23,12 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { BrandLogo } from "@/components/brand-logo";
 import { requireSignedInUser } from "@/lib/auth";
-import { loadSyncedHistory, saveHealthHistory, storageKey } from "@/lib/health-sync";
+import {
+  getLocalDateForState,
+  loadSyncedHistory,
+  saveHealthHistory,
+  storageKey,
+} from "@/lib/health-sync";
 import { morningQuotes } from "@/lib/morning-quotes";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -98,13 +103,13 @@ export default function HistoryPage() {
     const user = await requireSignedInUser();
     if (!user) return;
 
-    const today = new Date().toISOString().slice(0, 10);
     const savedCurrent = localStorage.getItem(storageKey);
     let history = await loadSyncedHistory<DaySummary>();
 
     if (savedCurrent) {
       try {
         const current = JSON.parse(savedCurrent) as Omit<DaySummary, "date">;
+        const today = getLocalDateForState(current);
         const todaySummary: DaySummary = {
           ...current,
           date: today,

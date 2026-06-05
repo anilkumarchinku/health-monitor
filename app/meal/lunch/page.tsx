@@ -207,6 +207,7 @@ export default function LunchMealPage() {
   const [rescheduleMessage, setRescheduleMessage] = useState("");
   const [waterFromPrevious, setWaterFromPrevious] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     async function loadMeal() {
@@ -277,7 +278,22 @@ export default function LunchMealPage() {
     streamRef.current = null;
   }
 
-  function captureImage() {
+  async function persistMealState(nextState: StoredAppState, successMessage?: string) {
+    setSyncing(true);
+    const synced = await saveHealthStateWithHistory(nextState).catch(() => false);
+    setSyncing(false);
+    setAppState(nextState);
+
+    if (successMessage) {
+      showToast(synced ? successMessage : `${successMessage} on this device. Cloud sync failed.`);
+    } else if (!synced) {
+      showToast("Saved on this device. Cloud sync failed.");
+    }
+
+    return synced;
+  }
+
+  async function captureImage() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || video.videoWidth === 0) return;
@@ -301,8 +317,7 @@ export default function LunchMealPage() {
     );
     const nextState = { ...appState, meals };
 
-    void saveHealthStateWithHistory(nextState);
-    setAppState(nextState);
+    await persistMealState(nextState, "Meal photo saved");
     setMeal(nextMeal);
     stopCamera();
     setCameraState("idle");
@@ -310,24 +325,20 @@ export default function LunchMealPage() {
     setSaved(false);
   }
 
-  function saveWaterAndContinue() {
+  async function saveWaterAndContinue() {
     const nextWater = (appState.water ?? 0) + waterFromPrevious;
     const nextState = { ...appState, water: nextWater };
-    void saveHealthStateWithHistory(nextState);
-    setAppState(nextState);
-    showToast("Water check saved");
+    await persistMealState(nextState, "Water check saved");
     setView(nextState.sleepCheckCompleted ? "details" : "sleep");
   }
 
-  function saveSleepAndContinue() {
+  async function saveSleepAndContinue() {
     const nextState = { ...appState, sleep, sleepCheckCompleted: true };
-    void saveHealthStateWithHistory(nextState);
-    setAppState(nextState);
-    showToast("Sleep check saved");
+    await persistMealState(nextState, "Sleep check saved");
     setView("details");
   }
 
-  function saveMeal() {
+  async function saveMeal() {
     const updatedMeal: MealLog = {
       ...meal,
       status: "logged",
@@ -344,14 +355,12 @@ export default function LunchMealPage() {
       meals,
     };
 
-    void saveHealthStateWithHistory(nextState);
-    setAppState(nextState);
+    await persistMealState(nextState, `${mealLabels[activeMealType]} has saved`);
     setMeal(updatedMeal);
     setSaved(true);
-    showToast(`${mealLabels[activeMealType]} has saved`);
   }
 
-  function reschedule(minutes: number) {
+  async function reschedule(minutes: number) {
     const snoozeLabel = minutes === 60 ? "+1hr" : `+${minutes} min`;
     const date = new Date(Date.now() + minutes * 60 * 1000);
     const plannedTime = `${String(date.getHours()).padStart(2, "0")}:${String(
@@ -365,12 +374,11 @@ export default function LunchMealPage() {
     );
     const nextState = { ...appState, meals };
 
-    void saveHealthStateWithHistory(nextState);
+    await persistMealState(nextState);
     void scheduleMealSnoozeReminder({
       mealType: activeMealType,
       delayMinutes: minutes,
     });
-    setAppState(nextState);
     setMeal(nextMeal);
     window.history.pushState({ mealRescheduled: true }, "", window.location.href);
     setRescheduleMessage(`Done, let's meet after ${snoozeLabel} 🥺`);
@@ -446,7 +454,7 @@ export default function LunchMealPage() {
             <Button
               className="mx-auto h-16 min-w-36 rounded-full border-4 border-white bg-white px-6 text-base font-semibold text-black shadow-soft hover:bg-white/90 disabled:opacity-60"
               onClick={captureImage}
-              disabled={cameraState !== "active"}
+              disabled={cameraState !== "active" || syncing}
               title="Capture meal"
             >
               <Camera className="h-7 w-7" />
@@ -502,7 +510,7 @@ export default function LunchMealPage() {
                 </CardDescription>
               </CardHeader>
               <CardFooter>
-                <Button className="w-full" onClick={openCamera}>
+                <Button className="w-full" onClick={openCamera} disabled={syncing}>
                   <Camera />
                   Open camera
                 </Button>
@@ -520,13 +528,13 @@ export default function LunchMealPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-3 gap-2">
-                <Button variant="outline" size="sm" onClick={() => reschedule(15)}>
+                <Button variant="outline" size="sm" onClick={() => reschedule(15)} disabled={syncing}>
                   +15
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => reschedule(30)}>
+                <Button variant="outline" size="sm" onClick={() => reschedule(30)} disabled={syncing}>
                   +30
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => reschedule(60)}>
+                <Button variant="outline" size="sm" onClick={() => reschedule(60)} disabled={syncing}>
                   +1hr
                 </Button>
               </CardContent>
@@ -577,11 +585,11 @@ export default function LunchMealPage() {
               )}
             </CardContent>
             <CardFooter className="flex flex-col gap-2 sm:flex-row">
-              <Button className="w-full sm:w-auto" onClick={saveMeal}>
+              <Button className="w-full sm:w-auto" onClick={saveMeal} disabled={syncing}>
                 <Save />
                 Save {mealLabelLower}
               </Button>
-              <Button className="w-full sm:w-auto" variant="outline" onClick={openCamera}>
+              <Button className="w-full sm:w-auto" variant="outline" onClick={openCamera} disabled={syncing}>
                 <RotateCcw />
                 Retake
               </Button>
@@ -740,7 +748,7 @@ export default function LunchMealPage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-2 sm:flex-row">
-              <Button className="w-full sm:w-auto" onClick={saveSleepAndContinue}>
+              <Button className="w-full sm:w-auto" onClick={saveSleepAndContinue} disabled={syncing}>
                 <Moon />
                 Save sleep
               </Button>
@@ -844,7 +852,7 @@ export default function LunchMealPage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-2 sm:flex-row">
-              <Button className="w-full sm:w-auto" onClick={saveWaterAndContinue}>
+              <Button className="w-full sm:w-auto" onClick={saveWaterAndContinue} disabled={syncing}>
                 <Droplets />
                 Continue
               </Button>

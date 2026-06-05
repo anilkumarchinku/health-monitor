@@ -109,6 +109,7 @@ export default function ProfilePage() {
   const [meals, setMeals] = useState<MealLog[]>(() => createMeals(defaultProfile));
   const [storedState, setStoredState] = useState<Partial<StoredAppState>>({});
   const [saved, setSaved] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     profileSchedule: true,
     todayTimeline: true,
@@ -156,7 +157,7 @@ export default function ProfilePage() {
     setSaved(false);
   }
 
-  function saveProfile() {
+  async function saveProfile() {
     const nextState: StoredAppState = {
       profile,
       onboardingCompleted: true,
@@ -174,10 +175,12 @@ export default function ProfilePage() {
       quoteFeedback: storedState.quoteFeedback ?? null,
     };
 
-    void saveHealthStateWithHistory(nextState);
+    setSyncing(true);
+    const synced = await saveHealthStateWithHistory(nextState).catch(() => false);
+    setSyncing(false);
     setStoredState(nextState);
     setSaved(true);
-    showToast("Profile has saved");
+    showToast(synced ? "Profile has saved" : "Profile saved on this device. Cloud sync failed.");
   }
 
   return (
@@ -196,7 +199,7 @@ export default function ProfilePage() {
               </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button variant="default" onClick={saveProfile}>
+              <Button variant="default" onClick={saveProfile} disabled={syncing}>
                 <Save />
                 Save
               </Button>
