@@ -108,18 +108,20 @@ export default function HistoryPage() {
 
     if (savedCurrent) {
       try {
-        const current = JSON.parse(savedCurrent) as Omit<DaySummary, "date">;
+        const current = JSON.parse(savedCurrent) as Partial<DaySummary>;
         const today = getLocalDateForState(current);
-        const todaySummary: DaySummary = {
-          ...current,
-          date: today,
-          updatedAt: new Date().toISOString(),
-        };
-        history = [
-          todaySummary,
-          ...history.filter((day) => day.date !== today),
-        ].slice(0, 30);
-        await saveHealthHistory(todaySummary);
+        if (!current.date || current.date === today) {
+          const todaySummary: DaySummary = {
+            ...(current as DaySummary),
+            date: today,
+            updatedAt: new Date().toISOString(),
+          };
+          history = [
+            todaySummary,
+            ...history.filter((day) => day.date !== today),
+          ].slice(0, 30);
+          await saveHealthHistory(todaySummary);
+        }
       } catch {
         localStorage.removeItem(storageKey);
       }

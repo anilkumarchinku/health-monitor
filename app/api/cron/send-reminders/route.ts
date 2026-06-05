@@ -7,6 +7,7 @@ type MealType = "breakfast" | "lunch" | "dinner";
 
 type HealthSnapshotRow = {
   user_id: string | null;
+  date: string;
   quote_index: number | null;
   profile: {
     wakeTime?: string;
@@ -75,7 +76,7 @@ export async function GET(request: Request) {
 
   const { data: snapshots, error: snapshotError } = await supabase
     .from("health_snapshots")
-    .select("user_id, profile, meals, quote_index")
+    .select("user_id, date, profile, meals, quote_index")
     .not("user_id", "is", null)
     .gte("date", earliestDate);
 
@@ -186,6 +187,8 @@ export async function GET(request: Request) {
 function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
+  const mealsForToday = snapshot.date === localNow.date ? snapshot.meals : null;
+  const dailySnapshot = { ...snapshot, meals: mealsForToday };
 
   const candidates: DueReminder[] = [
     {
@@ -197,7 +200,7 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
       body: getMorningQuoteText(snapshot.quote_index ?? 0),
       url: "/morning",
     },
-    ...getMealReminderCandidates(snapshot, profile, localNow.date),
+    ...getMealReminderCandidates(dailySnapshot, profile, localNow.date),
     {
       kind: "sleep",
       time: profile.sleepReminder ?? "",

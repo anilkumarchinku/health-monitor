@@ -26,7 +26,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
-import { getBrowserTimezone, saveHealthStateWithHistory, storageKey } from "@/lib/health-sync";
+import {
+  getBrowserTimezone,
+  getLocalDateForState,
+  resetDailyFieldsForNewDay,
+  saveHealthStateWithHistory,
+  storageKey,
+} from "@/lib/health-sync";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -54,6 +60,7 @@ type MealLog = {
 };
 
 type StoredAppState = {
+  date?: string;
   onboardingCompleted?: boolean;
   profile: Profile;
   meals: MealLog[];
@@ -62,6 +69,7 @@ type StoredAppState = {
   sleepCheckCompleted?: boolean;
   quoteIndex: number;
   quoteFeedback: unknown;
+  updatedAt?: string;
 };
 
 const defaultProfile: Profile = {
@@ -103,6 +111,29 @@ function meal(type: MealType, time: string): MealLog {
   };
 }
 
+function rollProfileStateForwardIfNeeded(state: StoredAppState): StoredAppState {
+  const profile = { ...defaultProfile, ...(state.profile ?? {}) };
+  const today = getLocalDateForState({ ...state, profile });
+  if (!state.date || state.date === today) return { ...state, profile };
+
+  const rolled = resetDailyFieldsForNewDay({
+    ...state,
+    profile,
+    meals: state.meals ?? createMeals(profile),
+  }) as StoredAppState;
+
+  return {
+    ...rolled,
+    profile,
+    meals: createMeals(profile),
+    water: 0,
+    sleepCheckCompleted: false,
+    quoteFeedback: null,
+    date: today,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export default function ProfilePage() {
   const showToast = useToast();
   const [profile, setProfile] = useState<Profile>(defaultProfile);
@@ -124,7 +155,7 @@ export default function ProfilePage() {
       if (!savedState) return;
 
       try {
-        const parsed = JSON.parse(savedState) as StoredAppState;
+        const parsed = rollProfileStateForwardIfNeeded(JSON.parse(savedState) as StoredAppState);
         setStoredState(parsed);
         setProfile(parsed.profile ?? defaultProfile);
         setMeals(parsed.meals ?? createMeals(parsed.profile ?? defaultProfile));

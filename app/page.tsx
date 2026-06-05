@@ -40,8 +40,10 @@ import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
 import {
   getBrowserTimezone,
+  getLocalDateForState,
   loadLatestUserSnapshot,
   prepareLocalUserSession,
+  resetDailyFieldsForNewDay,
   saveHealthStateWithHistory,
   storageKey,
 } from "@/lib/health-sync";
@@ -107,6 +109,7 @@ const mealLabels: Record<MealType, string> = {
 };
 
 type StoredHomeState = {
+  date?: string;
   onboardingCompleted?: boolean;
   profile?: Profile;
   meals?: MealLog[];
@@ -192,6 +195,27 @@ function isRemoteNewer(remote: StoredHomeState | null, local: StoredHomeState | 
   return remoteTime > localTime;
 }
 
+function rollStateForwardIfNeeded(state: StoredHomeState): StoredHomeState {
+  const profile = { ...defaultProfile, ...(state.profile ?? {}) };
+  const today = getLocalDateForState({ ...state, profile });
+
+  if (!state.date || state.date === today) return { ...state, profile };
+
+  const rolled = resetDailyFieldsForNewDay({
+    ...state,
+    profile,
+    meals: mergeMeals(state.meals, profile),
+  }) as StoredHomeState;
+
+  return {
+    ...rolled,
+    profile,
+    meals: createMeals(profile),
+    date: today,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export default function HomePage() {
   const showToast = useToast();
   const [isReady, setIsReady] = useState(false);
@@ -260,7 +284,7 @@ export default function HomePage() {
 
     if (saved) {
       try {
-        parsed = JSON.parse(saved) as StoredHomeState;
+        parsed = rollStateForwardIfNeeded(JSON.parse(saved) as StoredHomeState);
       } catch {
         localStorage.removeItem(storageKey);
       }
@@ -268,9 +292,19 @@ export default function HomePage() {
 
     if (options?.syncRemote) {
       const latest = await loadLatestUserSnapshot<StoredHomeState & { date: string }>();
-      if (latest?.onboardingCompleted && isRemoteNewer(latest, parsed)) {
-        localStorage.setItem(storageKey, JSON.stringify(latest));
-        applyStoredState(latest);
+      const rolledLatest = latest?.onboardingCompleted ? rollStateForwardIfNeeded(latest) : null;
+      const parsedIsToday = Boolean(parsed && parsed.date === getLocalDateForState(parsed));
+      const rolledLatestIsToday = Boolean(
+        rolledLatest && rolledLatest.date === getLocalDateForState(rolledLatest),
+      );
+
+      if (
+        rolledLatest?.onboardingCompleted &&
+        rolledLatestIsToday &&
+        (!parsedIsToday || isRemoteNewer(rolledLatest, parsed))
+      ) {
+        localStorage.setItem(storageKey, JSON.stringify(rolledLatest));
+        applyStoredState(rolledLatest);
         return;
       }
     }

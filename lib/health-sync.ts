@@ -8,6 +8,7 @@ const clientIdKey = "daily-health-client-id";
 const currentUserKey = "daily-health-current-user";
 
 type HealthState = {
+  date?: string;
   profile?: unknown;
   meals?: unknown[];
   water?: number;
@@ -199,10 +200,39 @@ export async function loadLatestUserSnapshot<T extends HealthSnapshot>() {
 }
 
 function createTodaySnapshot(state: HealthState): HealthSnapshot {
+  const date = getLocalDateForState(state);
+  const todayState = state.date && state.date !== date ? resetDailyFieldsForNewDay(state) : state;
+
+  return {
+    ...todayState,
+    date,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function resetDailyFieldsForNewDay(state: HealthState): HealthState {
   return {
     ...state,
-    date: getLocalDateForState(state),
-    updatedAt: new Date().toISOString(),
+    meals: Array.isArray(state.meals) ? state.meals.map(resetMealForNewDay) : state.meals,
+    water: 0,
+    sleepCheckCompleted: false,
+    quoteFeedback: null,
+  };
+}
+
+function resetMealForNewDay(meal: unknown) {
+  if (!isPlainRecord(meal)) return meal;
+
+  return {
+    ...meal,
+    actualTime: typeof meal.plannedTime === "string" ? meal.plannedTime : meal.actualTime,
+    description: "",
+    image: "",
+    hunger: 3,
+    fullness: 3,
+    notes: "",
+    status: "pending",
+    snoozeLabel: undefined,
   };
 }
 

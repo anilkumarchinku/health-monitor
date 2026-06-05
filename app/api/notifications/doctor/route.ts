@@ -166,6 +166,7 @@ export async function GET(request: Request) {
 function getDueReminders(snapshot: SnapshotRow, now: Date) {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
+  const mealsForToday = snapshot.date === localNow.date ? snapshot.meals : null;
   const mealCopy: Record<MealType, { title: string; body: string; url: string }> = {
     breakfast: {
       title: "You are late for breakfast",
@@ -192,7 +193,7 @@ function getDueReminders(snapshot: SnapshotRow, now: Date) {
       url: "/morning",
     },
     ...(["breakfast", "lunch", "dinner"] as MealType[]).map((type) => {
-      const meal = snapshot.meals?.find((item) => item.type === type);
+      const meal = mealsForToday?.find((item) => item.type === type);
       return {
         kind: type,
         time: meal?.plannedTime ?? profile[`${type}Time` as keyof typeof profile] ?? "",

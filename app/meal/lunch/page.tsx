@@ -30,8 +30,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { requireSignedInUser } from "@/lib/auth";
 import {
+  getLocalDateForState,
   loadLatestUserSnapshot,
   prepareLocalUserSession,
+  resetDailyFieldsForNewDay,
   saveHealthStateWithHistory,
   storageKey,
 } from "@/lib/health-sync";
@@ -53,6 +55,7 @@ type MealLog = {
 };
 
 type StoredAppState = {
+  date?: string;
   onboardingCompleted?: boolean;
   profile?: {
     name?: string;
@@ -62,6 +65,7 @@ type StoredAppState = {
     dinnerTime?: string;
     sleepReminder?: string;
     waterGoal?: number;
+    timezone?: string;
   };
   meals?: MealLog[];
   water?: number;
@@ -152,6 +156,26 @@ function mergeMealList(savedMeals: MealLog[] | undefined, profile: StoredAppStat
   });
 }
 
+function rollMealStateForwardIfNeeded(state: StoredAppState): StoredAppState {
+  const today = getLocalDateForState(state);
+  if (!state.date || state.date === today) return state;
+
+  const rolled = resetDailyFieldsForNewDay({
+    ...state,
+    meals: mergeMealList(state.meals, state.profile),
+  }) as StoredAppState;
+
+  return {
+    ...rolled,
+    meals: createDefaultMeals(state.profile),
+    water: 0,
+    sleepCheckCompleted: false,
+    quoteFeedback: null,
+    date: today,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 const fallbackSleep: SleepLog = {
   sleptAt: "23:15",
   wokeAt: "06:45",
@@ -166,16 +190,28 @@ async function loadMealState() {
 
   if (savedState) {
     try {
-      localState = JSON.parse(savedState) as StoredAppState;
+      localState = rollMealStateForwardIfNeeded(JSON.parse(savedState) as StoredAppState);
     } catch {
       localStorage.removeItem(storageKey);
     }
   }
 
   const remoteState = await loadLatestUserSnapshot<StoredAppState & { date: string }>();
-  if (remoteState?.onboardingCompleted && isRemoteNewer(remoteState, localState)) {
-    localStorage.setItem(storageKey, JSON.stringify(remoteState));
-    return remoteState;
+  const rolledRemoteState = remoteState?.onboardingCompleted
+    ? rollMealStateForwardIfNeeded(remoteState)
+    : null;
+  const localIsToday = Boolean(localState && localState.date === getLocalDateForState(localState));
+  const remoteIsToday = Boolean(
+    rolledRemoteState && rolledRemoteState.date === getLocalDateForState(rolledRemoteState),
+  );
+
+  if (
+    rolledRemoteState?.onboardingCompleted &&
+    remoteIsToday &&
+    (!localIsToday || isRemoteNewer(rolledRemoteState, localState))
+  ) {
+    localStorage.setItem(storageKey, JSON.stringify(rolledRemoteState));
+    return rolledRemoteState;
   }
 
   return localState;
