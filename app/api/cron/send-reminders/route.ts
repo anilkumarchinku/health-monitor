@@ -89,6 +89,7 @@ export async function GET(request: Request) {
   let dueReminders = 0;
   let subscriptionsFound = 0;
   const failures: string[] = [];
+  const staleSubscriptionIds: string[] = [];
 
   for (const snapshot of (snapshots ?? []) as HealthSnapshotRow[]) {
     if (!snapshot.user_id) continue;
@@ -140,7 +141,18 @@ export async function GET(request: Request) {
             sent += 1;
             reminderSent += 1;
           } catch (error) {
-            failures.push(`${subscriptionRow.id}: ${error instanceof Error ? error.message : "failed"}`);
+            const statusCode =
+              typeof error === "object" && error && "statusCode" in error
+                ? Number(error.statusCode)
+                : undefined;
+            if (statusCode === 404 || statusCode === 410) {
+              staleSubscriptionIds.push(subscriptionRow.id);
+            }
+            failures.push(
+              `${subscriptionRow.id}: ${
+                error instanceof Error ? error.message : "failed"
+              }${statusCode ? ` (${statusCode})` : ""}`,
+            );
           }
         }),
       );
@@ -149,6 +161,10 @@ export async function GET(request: Request) {
         await releaseReminder(supabase, snapshot.user_id, reminder.localDate, reminder.deliveryKey);
       }
     }
+  }
+
+  if (staleSubscriptionIds.length > 0) {
+    await supabase.from("push_subscriptions").delete().in("id", [...new Set(staleSubscriptionIds)]);
   }
 
   return NextResponse.json({
@@ -162,6 +178,7 @@ export async function GET(request: Request) {
       snapshotsChecked,
       dueReminders,
       subscriptionsFound,
+      staleSubscriptionsDeleted: new Set(staleSubscriptionIds).size,
     },
   });
 }
