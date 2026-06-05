@@ -26,11 +26,6 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { BrandLogo } from "@/components/brand-logo";
 import { requireSignedInUser } from "@/lib/auth";
-import {
-  adminUsersKey,
-  historyKey,
-  storageKey,
-} from "@/lib/health-sync";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -122,94 +117,47 @@ export default function AdminPage() {
 
   useEffect(() => {
     async function loadUsers() {
-    const user = await requireSignedInUser();
-    if (!user) return;
+      const user = await requireSignedInUser();
+      if (!user) return;
 
-    const today = new Date().toISOString().slice(0, 10);
-    let adminUsers: AdminUser[] = [];
-
-    try {
-      const savedAdminUsers = localStorage.getItem(adminUsersKey);
-      adminUsers = savedAdminUsers ? (JSON.parse(savedAdminUsers) as AdminUser[]) : [];
-    } catch {
-      adminUsers = [];
-    }
-
-    const remoteDays = await loadAdminSnapshots();
-    const remoteUsers = remoteDays.reduce<Record<string, DaySummary[]>>((acc, day) => {
-      const id = day.clientId ?? "supabase-user";
-      acc[id] = [...(acc[id] ?? []), day];
-      return acc;
-    }, {});
-
-    Object.entries(remoteUsers).forEach(([id, days]) => {
-      if (days.length === 0) return;
-      adminUsers = [
-        {
-          id,
-          name: days[0].profile?.name || "Supabase user",
-          days,
-        },
-        ...adminUsers.filter((user) => user.id !== id),
-      ];
-    });
-
-    try {
-      const savedHistory = localStorage.getItem(historyKey);
-      const savedCurrent = localStorage.getItem(storageKey);
-      let localDays = savedHistory ? (JSON.parse(savedHistory) as DaySummary[]) : [];
-
-      if (savedCurrent) {
-        const current = JSON.parse(savedCurrent) as Omit<DaySummary, "date">;
-        const todaySummary: DaySummary = {
-          ...current,
-          date: today,
-          updatedAt: new Date().toISOString(),
-        };
-        localDays = [
-          todaySummary,
-          ...localDays.filter((day) => day.date !== today),
-        ].slice(0, 30);
-      }
-
-      if (localDays.length > 0) {
-        const localUser: AdminUser = {
-          id: "local-user",
-          name: localDays[0].profile.name || "Local user",
-          days: localDays,
-        };
-        adminUsers = [
-          localUser,
-          ...adminUsers.filter((user) => user.id !== localUser.id),
-        ];
-      }
-    } catch {
-      localStorage.removeItem(storageKey);
-    }
-
-    setUsers(adminUsers);
-    setExpandedUsers(
-      adminUsers.reduce<Record<string, boolean>>((acc, user, index) => {
-        acc[user.id] = index === 0;
+      const remoteDays = await loadAdminSnapshots();
+      const remoteUsers = remoteDays.reduce<Record<string, DaySummary[]>>((acc, day) => {
+        const id = day.clientId ?? "supabase-user";
+        acc[id] = [...(acc[id] ?? []), day];
         return acc;
-      }, {}),
-    );
-    setExpandedDays(
-      adminUsers.reduce<Record<string, boolean>>((acc, user) => {
-        user.days.forEach((day, index) => {
-          acc[`${user.id}-${day.date}`] = index === 0;
-        });
-        return acc;
-      }, {}),
-    );
-    setExpandedMeals(
-      adminUsers.reduce<Record<string, boolean>>((acc, user) => {
-        user.days.forEach((day, index) => {
-          acc[`${user.id}-${day.date}-meals`] = index === 0;
-        });
-        return acc;
-      }, {}),
-    );
+      }, {});
+
+      const adminUsers = Object.entries(remoteUsers).map(([id, days]) => ({
+        id,
+        name: days[0]?.profile?.name || "Supabase user",
+        days: days
+          .slice()
+          .sort((a, b) => b.date.localeCompare(a.date)),
+      }));
+
+      setUsers(adminUsers);
+      setExpandedUsers(
+        adminUsers.reduce<Record<string, boolean>>((acc, user, index) => {
+          acc[user.id] = index === 0;
+          return acc;
+        }, {}),
+      );
+      setExpandedDays(
+        adminUsers.reduce<Record<string, boolean>>((acc, user) => {
+          user.days.forEach((day, index) => {
+            acc[`${user.id}-${day.date}`] = index === 0;
+          });
+          return acc;
+        }, {}),
+      );
+      setExpandedMeals(
+        adminUsers.reduce<Record<string, boolean>>((acc, user) => {
+          user.days.forEach((day, index) => {
+            acc[`${user.id}-${day.date}-meals`] = index === 0;
+          });
+          return acc;
+        }, {}),
+      );
     }
 
     void loadUsers();
