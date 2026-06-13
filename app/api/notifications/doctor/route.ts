@@ -42,6 +42,16 @@ type DoctorReminder = {
   status?: string;
 };
 
+type ReminderTiming = {
+  due: boolean;
+  status: "invalid-time" | "future" | "due" | "missed-window";
+  minutesUntil?: number;
+  minutesLate?: number;
+};
+
+const DEFAULT_REMINDER_WINDOW_MINUTES = 30;
+const MIN_REMINDER_WINDOW_MINUTES = 30;
+
 export async function GET(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey =
@@ -119,7 +129,11 @@ export async function GET(request: Request) {
   const latestSnapshot = (snapshotsResult.data?.[0] ?? null) as SnapshotRow | null;
   const subscriptions = (subscriptionsResult.data ?? []) as SubscriptionRow[];
   const now = new Date();
-  const due = latestSnapshot ? getDueReminders(latestSnapshot, now) : [];
+  const reminderWindowMinutes = getReminderWindowMinutes();
+  const reminderSet = latestSnapshot ? getReminderCandidates(latestSnapshot, now) : null;
+  const due = reminderSet
+    ? getDueRemindersFromCandidates(reminderSet.reminders, reminderSet.localNow.minutes)
+    : [];
   const checks = {
     hasSnapshot: Boolean(latestSnapshot),
     hasSubscription: subscriptions.length > 0,
@@ -150,8 +164,20 @@ export async function GET(request: Request) {
           updatedAt: latestSnapshot.updated_at,
           profile: latestSnapshot.profile,
           meals: latestSnapshot.meals,
-          localNow: getLocalDateParts(now, latestSnapshot.profile?.timezone || "UTC"),
+          localNow: reminderSet?.localNow ?? getLocalDateParts(now, latestSnapshot.profile?.timezone || "UTC"),
           dueNow: due,
+          reminderWindowMinutes,
+          reminders: reminderSet?.reminders.map((reminder) => {
+            const timing = getReminderTiming(reminder.time, reminderSet.localNow.minutes);
+            return {
+              kind: reminder.kind,
+              time: reminder.time,
+              status: reminder.status,
+              windowStatus: timing.status,
+              minutesUntil: timing.minutesUntil,
+              minutesLate: timing.minutesLate,
+            };
+          }) ?? [],
         }
       : null,
     subscriptions: subscriptions.map((subscription) => ({
@@ -164,6 +190,11 @@ export async function GET(request: Request) {
 }
 
 function getDueReminders(snapshot: SnapshotRow, now: Date) {
+  const reminderSet = getReminderCandidates(snapshot, now);
+  return getDueRemindersFromCandidates(reminderSet.reminders, reminderSet.localNow.minutes);
+}
+
+function getReminderCandidates(snapshot: SnapshotRow, now: Date) {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
   const mealsForToday = snapshot.date === localNow.date ? snapshot.meals : null;
@@ -212,24 +243,48 @@ function getDueReminders(snapshot: SnapshotRow, now: Date) {
     },
   ];
 
+  return { localNow, reminders };
+}
+
+function getDueRemindersFromCandidates(reminders: DoctorReminder[], currentLocalMinutes: number) {
   return reminders.filter(
     (reminder) =>
       reminder.status !== "logged" &&
       reminder.status !== "skipped" &&
-      isWithinCronWindow(reminder.time, localNow.minutes),
+      isWithinCronWindow(reminder.time, currentLocalMinutes),
   );
 }
 
 function isWithinCronWindow(time: string, currentLocalMinutes: number) {
-  if (!/^\d{2}:\d{2}$/.test(time)) return false;
+  return getReminderTiming(time, currentLocalMinutes).due;
+}
+
+function getReminderTiming(time: string, currentLocalMinutes: number): ReminderTiming {
+  if (!/^\d{2}:\d{2}$/.test(time)) return { due: false, status: "invalid-time" };
   const [hour, minute] = time.split(":").map(Number);
   const diff = currentLocalMinutes - (hour * 60 + minute);
-  const windowMinutes = Number(process.env.REMINDER_WINDOW_MINUTES ?? 10);
-  return diff >= 0 && diff < Math.max(1, windowMinutes);
+  const windowMinutes = getReminderWindowMinutes();
+
+  if (diff < 0) {
+    return { due: false, status: "future", minutesUntil: Math.abs(diff) };
+  }
+
+  if (diff >= windowMinutes) {
+    return { due: false, status: "missed-window", minutesLate: diff };
+  }
+
+  return { due: true, status: "due", minutesLate: diff };
+}
+
+function getReminderWindowMinutes() {
+  const value = Number(process.env.REMINDER_WINDOW_MINUTES ?? DEFAULT_REMINDER_WINDOW_MINUTES);
+  if (!Number.isFinite(value)) return DEFAULT_REMINDER_WINDOW_MINUTES;
+  return Math.max(MIN_REMINDER_WINDOW_MINUTES, value);
 }
 
 function getLocalDateParts(date: Date, timezone: string) {
   let parts: Intl.DateTimeFormatPart[];
+  let resolvedTimezone = timezone;
   try {
     parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: timezone,
@@ -241,6 +296,7 @@ function getLocalDateParts(date: Date, timezone: string) {
       hour12: false,
     }).formatToParts(date);
   } catch {
+    resolvedTimezone = "UTC";
     parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: "UTC",
       year: "numeric",
@@ -258,7 +314,7 @@ function getLocalDateParts(date: Date, timezone: string) {
   return {
     date: `${value("year")}-${value("month")}-${value("day")}`,
     time: `${value("hour")}:${value("minute")}`,
-    timezone,
+    timezone: resolvedTimezone,
     minutes: hour * 60 + minute,
   };
 }

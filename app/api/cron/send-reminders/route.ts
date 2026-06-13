@@ -44,6 +44,20 @@ type DueReminder = {
   url: string;
 };
 
+type ReminderCandidate = DueReminder & {
+  status?: string;
+};
+
+type ReminderTiming = {
+  due: boolean;
+  status: "invalid-time" | "future" | "due" | "missed-window";
+  minutesUntil?: number;
+  minutesLate?: number;
+};
+
+const DEFAULT_REMINDER_WINDOW_MINUTES = 30;
+const MIN_REMINDER_WINDOW_MINUTES = 30;
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
@@ -91,6 +105,22 @@ export async function GET(request: Request) {
   let subscriptionsFound = 0;
   const failures: string[] = [];
   const staleSubscriptionIds: string[] = [];
+  const scheduleDiagnostics: {
+    userId: string;
+    snapshotDate: string;
+    localDate: string;
+    localTime: string;
+    timezone: string;
+    subscriptions: number;
+    reminders: {
+      kind: ReminderKind;
+      time: string;
+      status: ReminderTiming["status"];
+      minutesUntil?: number;
+      minutesLate?: number;
+    }[];
+  }[] = [];
+  const reminderWindowMinutes = getReminderWindowMinutes();
 
   for (const snapshot of (snapshots ?? []) as HealthSnapshotRow[]) {
     if (!snapshot.user_id) continue;
@@ -102,7 +132,32 @@ export async function GET(request: Request) {
       .eq("user_id", snapshot.user_id);
     subscriptionsFound += subscriptions?.length ?? 0;
 
-    const reminders = getDueReminders(snapshot, now);
+    const reminderSet = getReminderCandidates(snapshot, now);
+    const reminders = getDueRemindersFromCandidates(
+      reminderSet.candidates,
+      reminderSet.localNow.minutes,
+    );
+    if (scheduleDiagnostics.length < 10) {
+      scheduleDiagnostics.push({
+        userId: `${snapshot.user_id.slice(0, 8)}...`,
+        snapshotDate: snapshot.date,
+        localDate: reminderSet.localNow.date,
+        localTime: reminderSet.localNow.time,
+        timezone: reminderSet.localNow.timezone,
+        subscriptions: subscriptions?.length ?? 0,
+        reminders: reminderSet.candidates.map((reminder) => {
+          const timing = getReminderTiming(reminder.time, reminderSet.localNow.minutes);
+          return {
+            kind: reminder.kind,
+            time: reminder.time,
+            status: timing.status,
+            minutesUntil: timing.minutesUntil,
+            minutesLate: timing.minutesLate,
+          };
+        }),
+      });
+    }
+
     if (reminders.length === 0) {
       skipped += 1;
       continue;
@@ -175,22 +230,29 @@ export async function GET(request: Request) {
     diagnostics: {
       now: now.toISOString(),
       earliestDate,
+      reminderWindowMinutes,
       snapshotsFetched: snapshots?.length ?? 0,
       snapshotsChecked,
       dueReminders,
       subscriptionsFound,
       staleSubscriptionsDeleted: new Set(staleSubscriptionIds).size,
+      scheduleDiagnostics,
     },
   });
 }
 
 function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] {
+  const reminderSet = getReminderCandidates(snapshot, now);
+  return getDueRemindersFromCandidates(reminderSet.candidates, reminderSet.localNow.minutes);
+}
+
+function getReminderCandidates(snapshot: HealthSnapshotRow, now: Date) {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
   const mealsForToday = snapshot.date === localNow.date ? snapshot.meals : null;
   const dailySnapshot = { ...snapshot, meals: mealsForToday };
 
-  const candidates: DueReminder[] = [
+  const candidates: ReminderCandidate[] = [
     {
       kind: "morning",
       time: profile.wakeTime ?? "",
@@ -212,14 +274,23 @@ function getDueReminders(snapshot: HealthSnapshotRow, now: Date): DueReminder[] 
     },
   ];
 
-  return candidates.filter((reminder) => isWithinCronWindow(reminder.time, localNow.minutes));
+  return { localNow, candidates };
+}
+
+function getDueRemindersFromCandidates(
+  candidates: ReminderCandidate[],
+  currentLocalMinutes: number,
+): DueReminder[] {
+  return candidates
+    .filter((reminder) => isWithinCronWindow(reminder.time, currentLocalMinutes))
+    .map(({ status: _status, ...reminder }) => reminder);
 }
 
 function getMealReminderCandidates(
   snapshot: HealthSnapshotRow,
   profile: NonNullable<HealthSnapshotRow["profile"]>,
   localDate: string,
-): DueReminder[] {
+): ReminderCandidate[] {
   const mealCopy: Record<MealType, { title: string; body: string }> = {
     breakfast: {
       title: "You are late for breakfast",
@@ -251,24 +322,41 @@ function getMealReminderCandidates(
         status: meal?.status,
       };
     })
-    .filter((reminder) => reminder.status !== "logged" && reminder.status !== "skipped")
-    .map(({ status: _status, ...reminder }) => reminder);
+    .filter((reminder) => reminder.status !== "logged" && reminder.status !== "skipped");
 }
 
 function isWithinCronWindow(time: string, currentLocalMinutes: number) {
-  if (!/^\d{2}:\d{2}$/.test(time)) return false;
+  return getReminderTiming(time, currentLocalMinutes).due;
+}
+
+function getReminderTiming(time: string, currentLocalMinutes: number): ReminderTiming {
+  if (!/^\d{2}:\d{2}$/.test(time)) return { due: false, status: "invalid-time" };
 
   const [hour, minute] = time.split(":").map(Number);
   const targetMinutes = hour * 60 + minute;
   const diff = currentLocalMinutes - targetMinutes;
+  const windowMinutes = getReminderWindowMinutes();
 
-  const windowMinutes = Number(process.env.REMINDER_WINDOW_MINUTES ?? 10);
+  if (diff < 0) {
+    return { due: false, status: "future", minutesUntil: Math.abs(diff) };
+  }
 
-  return diff >= 0 && diff < Math.max(1, windowMinutes);
+  if (diff >= windowMinutes) {
+    return { due: false, status: "missed-window", minutesLate: diff };
+  }
+
+  return { due: true, status: "due", minutesLate: diff };
+}
+
+function getReminderWindowMinutes() {
+  const value = Number(process.env.REMINDER_WINDOW_MINUTES ?? DEFAULT_REMINDER_WINDOW_MINUTES);
+  if (!Number.isFinite(value)) return DEFAULT_REMINDER_WINDOW_MINUTES;
+  return Math.max(MIN_REMINDER_WINDOW_MINUTES, value);
 }
 
 function getLocalDateParts(date: Date, timezone: string) {
   let parts: Intl.DateTimeFormatPart[];
+  let resolvedTimezone = timezone;
 
   try {
     parts = new Intl.DateTimeFormat("en-CA", {
@@ -281,6 +369,7 @@ function getLocalDateParts(date: Date, timezone: string) {
       hour12: false,
     }).formatToParts(date);
   } catch {
+    resolvedTimezone = "UTC";
     parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: "UTC",
       year: "numeric",
@@ -298,6 +387,8 @@ function getLocalDateParts(date: Date, timezone: string) {
 
   return {
     date: `${value("year")}-${value("month")}-${value("day")}`,
+    time: `${value("hour")}:${value("minute")}`,
+    timezone: resolvedTimezone,
     minutes: hour * 60 + minute,
   };
 }

@@ -40,7 +40,16 @@ export type NotificationDoctorReport = {
       time?: string;
       timezone?: string;
     };
+    reminderWindowMinutes?: number;
     dueNow?: unknown[];
+    reminders?: {
+      kind?: string;
+      time?: string;
+      status?: string;
+      windowStatus?: string;
+      minutesUntil?: number;
+      minutesLate?: number;
+    }[];
   } | null;
   subscriptions?: unknown[];
   recentDeliveries?: unknown[];

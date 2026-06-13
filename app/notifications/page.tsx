@@ -153,6 +153,39 @@ export default function NotificationsPage() {
             <Detail label="Local date" value={report?.latestSnapshot?.localNow?.date ?? "-"} />
             <Detail label="Local time" value={report?.latestSnapshot?.localNow?.time ?? "-"} />
             <Detail label="Timezone" value={report?.latestSnapshot?.localNow?.timezone ?? "-"} />
+            <Detail
+              label="Send window"
+              value={`${report?.latestSnapshot?.reminderWindowMinutes ?? 30} min`}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="mt-5">
+          <CardHeader>
+            <CardTitle>Schedule Decision</CardTitle>
+            <CardDescription>Shows why cron will send or wait for each saved reminder.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {report?.latestSnapshot?.reminders?.length ? (
+              report.latestSnapshot.reminders.map((reminder) => (
+                <div
+                  key={`${reminder.kind}-${reminder.time}`}
+                  className="flex flex-col gap-2 rounded-md border bg-white/70 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="font-medium capitalize">{reminder.kind}</p>
+                    <p className="text-muted-foreground">
+                      {reminder.time || "No time saved"}{reminder.status ? `, ${reminder.status}` : ""}
+                    </p>
+                  </div>
+                  <Badge variant="outline">{formatWindowStatus(reminder)}</Badge>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-md border bg-white/70 p-3 text-sm">
+                No reminders found in the saved schedule.
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>
@@ -190,4 +223,21 @@ function Detail({ label, value }: { label: string; value: string | number }) {
       <p className="mt-1 font-semibold">{value}</p>
     </div>
   );
+}
+
+function formatWindowStatus(reminder: {
+  windowStatus?: string;
+  minutesUntil?: number;
+  minutesLate?: number;
+}) {
+  if (reminder.windowStatus === "due") {
+    return `Due now, ${reminder.minutesLate ?? 0} min late`;
+  }
+  if (reminder.windowStatus === "future") {
+    return `In ${reminder.minutesUntil ?? 0} min`;
+  }
+  if (reminder.windowStatus === "missed-window") {
+    return `Missed by ${reminder.minutesLate ?? 0} min`;
+  }
+  return "Invalid time";
 }
