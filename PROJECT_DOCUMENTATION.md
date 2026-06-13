@@ -460,7 +460,7 @@ Important notes:
 - `SUPABASE_SERVICE_ROLE_KEY` must stay server-only.
 - `VAPID_PRIVATE_KEY` must stay server-only.
 - `CRON_SECRET` must stay server-only.
-- Set `REMINDER_WINDOW_MINUTES` to `30` for launch. The app will not allow this window to shrink below 30 minutes because a tiny window can miss reminders if cron-job.org runs late; `reminder_deliveries` prevents repeat sends for the same user/date/reminder.
+- Set `REMINDER_WINDOW_MINUTES` to `30` for launch. The app will not allow this fallback window to shrink below 30 minutes. Normal reminders are not tied to a tiny exact-minute window: morning stays active until breakfast, breakfast until lunch, lunch until dinner, dinner until sleep, and sleep until the end of the user's local day. `reminder_deliveries` prevents repeat sends for the same user/date/reminder.
 
 ## 13. Cron Setup
 

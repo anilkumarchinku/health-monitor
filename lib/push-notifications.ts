@@ -49,6 +49,8 @@ export type NotificationDoctorReport = {
       windowStatus?: string;
       minutesUntil?: number;
       minutesLate?: number;
+      expiresIn?: number;
+      expiredBy?: number;
     }[];
   } | null;
   subscriptions?: unknown[];

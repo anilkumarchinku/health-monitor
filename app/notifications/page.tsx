@@ -229,15 +229,17 @@ function formatWindowStatus(reminder: {
   windowStatus?: string;
   minutesUntil?: number;
   minutesLate?: number;
+  expiresIn?: number;
+  expiredBy?: number;
 }) {
   if (reminder.windowStatus === "due") {
-    return `Due now, ${reminder.minutesLate ?? 0} min late`;
+    return `Due now, active for ${reminder.expiresIn ?? 0} min`;
   }
   if (reminder.windowStatus === "future") {
     return `In ${reminder.minutesUntil ?? 0} min`;
   }
-  if (reminder.windowStatus === "missed-window") {
-    return `Missed by ${reminder.minutesLate ?? 0} min`;
+  if (reminder.windowStatus === "expired") {
+    return `Expired ${reminder.expiredBy ?? 0} min ago`;
   }
   return "Invalid time";
 }

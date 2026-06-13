@@ -40,13 +40,16 @@ type DoctorReminder = {
   body: string;
   url: string;
   status?: string;
+  sendUntilMinutes?: number;
 };
 
 type ReminderTiming = {
   due: boolean;
-  status: "invalid-time" | "future" | "due" | "missed-window";
+  status: "invalid-time" | "future" | "due" | "expired";
   minutesUntil?: number;
   minutesLate?: number;
+  expiresIn?: number;
+  expiredBy?: number;
 };
 
 const DEFAULT_REMINDER_WINDOW_MINUTES = 30;
@@ -168,7 +171,11 @@ export async function GET(request: Request) {
           dueNow: due,
           reminderWindowMinutes,
           reminders: reminderSet?.reminders.map((reminder) => {
-            const timing = getReminderTiming(reminder.time, reminderSet.localNow.minutes);
+            const timing = getReminderTiming(
+              reminder.time,
+              reminderSet.localNow.minutes,
+              reminder.sendUntilMinutes,
+            );
             return {
               kind: reminder.kind,
               time: reminder.time,
@@ -176,6 +183,8 @@ export async function GET(request: Request) {
               windowStatus: timing.status,
               minutesUntil: timing.minutesUntil,
               minutesLate: timing.minutesLate,
+              expiresIn: timing.expiresIn,
+              expiredBy: timing.expiredBy,
             };
           }) ?? [],
         }
@@ -222,16 +231,19 @@ function getReminderCandidates(snapshot: SnapshotRow, now: Date) {
       title: "Good morning, sweetheart",
       body: getMorningQuoteText(snapshot.quote_index ?? 0),
       url: "/morning",
+      sendUntilMinutes: getSegmentEndMinutes(profile.wakeTime, profile.breakfastTime),
     },
     ...(["breakfast", "lunch", "dinner"] as MealType[]).map((type) => {
       const meal = mealsForToday?.find((item) => item.type === type);
+      const time = meal?.plannedTime ?? profile[`${type}Time` as keyof typeof profile] ?? "";
       return {
         kind: type,
-        time: meal?.plannedTime ?? profile[`${type}Time` as keyof typeof profile] ?? "",
+        time,
         title: mealCopy[type].title,
         body: mealCopy[type].body,
         url: mealCopy[type].url,
         status: meal?.status,
+        sendUntilMinutes: getMealSegmentEndMinutes(type, profile, time),
       };
     }),
     {
@@ -240,6 +252,7 @@ function getReminderCandidates(snapshot: SnapshotRow, now: Date) {
       title: "Sleep check-in",
       body: "Tap to enter when you slept and protect tomorrow's energy.",
       url: "/",
+      sendUntilMinutes: 1439,
     },
   ];
 
@@ -251,35 +264,83 @@ function getDueRemindersFromCandidates(reminders: DoctorReminder[], currentLocal
     (reminder) =>
       reminder.status !== "logged" &&
       reminder.status !== "skipped" &&
-      isWithinCronWindow(reminder.time, currentLocalMinutes),
+      isWithinCronWindow(reminder.time, currentLocalMinutes, reminder.sendUntilMinutes),
   );
 }
 
-function isWithinCronWindow(time: string, currentLocalMinutes: number) {
-  return getReminderTiming(time, currentLocalMinutes).due;
+function isWithinCronWindow(
+  time: string,
+  currentLocalMinutes: number,
+  sendUntilMinutes?: number,
+) {
+  return getReminderTiming(time, currentLocalMinutes, sendUntilMinutes).due;
 }
 
-function getReminderTiming(time: string, currentLocalMinutes: number): ReminderTiming {
+function getReminderTiming(
+  time: string,
+  currentLocalMinutes: number,
+  sendUntilMinutes?: number,
+): ReminderTiming {
   if (!/^\d{2}:\d{2}$/.test(time)) return { due: false, status: "invalid-time" };
   const [hour, minute] = time.split(":").map(Number);
-  const diff = currentLocalMinutes - (hour * 60 + minute);
-  const windowMinutes = getReminderWindowMinutes();
+  const targetMinutes = hour * 60 + minute;
+  const diff = currentLocalMinutes - targetMinutes;
+  const resolvedSendUntilMinutes =
+    sendUntilMinutes && sendUntilMinutes > targetMinutes
+      ? sendUntilMinutes
+      : Math.min(1439, targetMinutes + getReminderWindowMinutes());
 
   if (diff < 0) {
     return { due: false, status: "future", minutesUntil: Math.abs(diff) };
   }
 
-  if (diff >= windowMinutes) {
-    return { due: false, status: "missed-window", minutesLate: diff };
+  if (currentLocalMinutes > resolvedSendUntilMinutes) {
+    return {
+      due: false,
+      status: "expired",
+      minutesLate: diff,
+      expiredBy: currentLocalMinutes - resolvedSendUntilMinutes,
+    };
   }
 
-  return { due: true, status: "due", minutesLate: diff };
+  return {
+    due: true,
+    status: "due",
+    minutesLate: diff,
+    expiresIn: resolvedSendUntilMinutes - currentLocalMinutes,
+  };
 }
 
 function getReminderWindowMinutes() {
   const value = Number(process.env.REMINDER_WINDOW_MINUTES ?? DEFAULT_REMINDER_WINDOW_MINUTES);
   if (!Number.isFinite(value)) return DEFAULT_REMINDER_WINDOW_MINUTES;
   return Math.max(MIN_REMINDER_WINDOW_MINUTES, value);
+}
+
+function getMealSegmentEndMinutes(
+  type: MealType,
+  profile: NonNullable<SnapshotRow["profile"]>,
+  fallbackTime: string,
+) {
+  if (type === "breakfast") return getSegmentEndMinutes(fallbackTime, profile.lunchTime);
+  if (type === "lunch") return getSegmentEndMinutes(fallbackTime, profile.dinnerTime);
+  return getSegmentEndMinutes(fallbackTime, profile.sleepReminder);
+}
+
+function getSegmentEndMinutes(startTime?: string, endTime?: string) {
+  const startMinutes = parseTimeToMinutes(startTime);
+  const endMinutes = parseTimeToMinutes(endTime);
+
+  if (startMinutes === null) return undefined;
+  if (endMinutes !== null && endMinutes > startMinutes) return endMinutes;
+
+  return Math.min(1439, startMinutes + getReminderWindowMinutes());
+}
+
+function parseTimeToMinutes(time?: string) {
+  if (!time || !/^\d{2}:\d{2}$/.test(time)) return null;
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
 }
 
 function getLocalDateParts(date: Date, timezone: string) {
