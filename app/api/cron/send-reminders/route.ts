@@ -105,6 +105,7 @@ export async function GET(request: Request) {
   let skipped = 0;
   let snapshotsChecked = 0;
   let dueReminders = 0;
+  let alreadyDelivered = 0;
   let subscriptionsFound = 0;
   const failures: string[] = [];
   const staleSubscriptionIds: string[] = [];
@@ -188,7 +189,10 @@ export async function GET(request: Request) {
         reminder.kind,
         reminder.deliveryKey,
       );
-      if (!shouldSend) continue;
+      if (!shouldSend) {
+        alreadyDelivered += 1;
+        continue;
+      }
 
       let reminderSent = 0;
       await Promise.all(
@@ -245,6 +249,7 @@ export async function GET(request: Request) {
       snapshotsFetched: snapshots?.length ?? 0,
       snapshotsChecked,
       dueReminders,
+      alreadyDelivered,
       subscriptionsFound,
       staleSubscriptionsDeleted: new Set(staleSubscriptionIds).size,
       scheduleDiagnostics,
