@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Camera,
@@ -241,44 +241,28 @@ export default function HomePage() {
     todayTimeline: false,
   });
 
-  useEffect(() => {
-    async function boot() {
-      const user = await requireSignedInUser();
-      if (!user) return;
-      prepareLocalUserSession(user.id);
-      await loadStoredState({ redirectIfMissing: true, syncRemote: true });
-    }
-
-    void boot();
-
-    setTimeGreeting(getTimeGreeting());
-    const greetingTimer = window.setInterval(() => {
-      setTimeGreeting(getTimeGreeting());
-    }, 60 * 1000);
-
-    function refreshFromStorage() {
-      loadStoredState();
-    }
-
-    function refreshWhenVisible() {
-      if (document.visibilityState === "visible") {
-        loadStoredState();
-      }
-    }
-
-    window.addEventListener("focus", refreshFromStorage);
-    window.addEventListener("pageshow", refreshFromStorage);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-
-    return () => {
-      window.clearInterval(greetingTimer);
-      window.removeEventListener("focus", refreshFromStorage);
-      window.removeEventListener("pageshow", refreshFromStorage);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
+  const applyStoredState = useCallback((parsed: StoredHomeState) => {
+    const nextProfile = { ...defaultProfile, ...(parsed.profile ?? {}) };
+    setProfile(nextProfile);
+    setMeals(mergeMeals(parsed.meals, nextProfile));
+    setWater(parsed.water ?? 0);
+    setSleep(parsed.sleep ?? {
+      sleptAt: "23:15",
+      wokeAt: "06:45",
+      hours: 7,
+      minutes: 30,
+      quality: "Okay",
+    });
+    setSleepCheckCompleted(parsed.sleepCheckCompleted ?? false);
+    setQuoteIndex(parsed.quoteIndex ?? 0);
+    setQuoteFeedback(parsed.quoteFeedback ?? null);
+    setIsReady(true);
   }, []);
 
-  async function loadStoredState(options?: { redirectIfMissing?: boolean; syncRemote?: boolean }) {
+  const loadStoredState = useCallback(async (options?: {
+    redirectIfMissing?: boolean;
+    syncRemote?: boolean;
+  }) => {
     const saved = localStorage.getItem(storageKey);
     let parsed: StoredHomeState | null = null;
 
@@ -320,25 +304,44 @@ export default function HomePage() {
     }
 
     applyStoredState(parsed);
-  }
+  }, [applyStoredState]);
 
-  function applyStoredState(parsed: StoredHomeState) {
-    const nextProfile = { ...defaultProfile, ...(parsed.profile ?? {}) };
-    setProfile(nextProfile);
-    setMeals(mergeMeals(parsed.meals, nextProfile));
-    setWater(parsed.water ?? 0);
-    setSleep(parsed.sleep ?? {
-      sleptAt: "23:15",
-      wokeAt: "06:45",
-      hours: 7,
-      minutes: 30,
-      quality: "Okay",
-    });
-    setSleepCheckCompleted(parsed.sleepCheckCompleted ?? false);
-    setQuoteIndex(parsed.quoteIndex ?? 0);
-    setQuoteFeedback(parsed.quoteFeedback ?? null);
-    setIsReady(true);
-  }
+  useEffect(() => {
+    async function boot() {
+      const user = await requireSignedInUser();
+      if (!user) return;
+      prepareLocalUserSession(user.id);
+      await loadStoredState({ redirectIfMissing: true, syncRemote: true });
+    }
+
+    void boot();
+
+    setTimeGreeting(getTimeGreeting());
+    const greetingTimer = window.setInterval(() => {
+      setTimeGreeting(getTimeGreeting());
+    }, 60 * 1000);
+
+    function refreshFromStorage() {
+      loadStoredState();
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") {
+        loadStoredState();
+      }
+    }
+
+    window.addEventListener("focus", refreshFromStorage);
+    window.addEventListener("pageshow", refreshFromStorage);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(greetingTimer);
+      window.removeEventListener("focus", refreshFromStorage);
+      window.removeEventListener("pageshow", refreshFromStorage);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [loadStoredState]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -374,12 +377,6 @@ export default function HomePage() {
     (loggedMeals / 3) * 40 + (waterPercent / 100) * 35 + (sleepPercent / 100) * 25,
   );
 
-  const nextReminder = useMemo(() => {
-    const pending = meals.find((meal) => meal.status === "pending");
-    if (pending) return `${mealLabels[pending.type]} at ${pending.plannedTime}`;
-    return `Sleep check-in at ${profile.sleepReminder}`;
-  }, [meals, profile.sleepReminder]);
-
   function updateProfile<K extends keyof Profile>(key: K, value: Profile[K]) {
     setProfile((current) => ({ ...current, [key]: value }));
   }
@@ -400,17 +397,6 @@ export default function HomePage() {
   function updateSleep(patch: Partial<SleepLog>) {
     setSleep((current) => ({ ...current, ...patch }));
     setSleepCheckCompleted(true);
-  }
-
-  function handleImageUpload(type: MealType, event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateMeal(type, { image: String(reader.result) });
-    };
-    reader.readAsDataURL(file);
   }
 
   function rescheduleMeal(type: MealType, minutes: number) {
@@ -648,36 +634,17 @@ export default function HomePage() {
                       />
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
-                      <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/40 p-4 text-center transition hover:border-primary">
+                    <div className="glass-surface flex flex-col items-center justify-center gap-3 rounded-lg p-5 text-center">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                         <Camera className="h-8 w-8 text-primary" />
-                        <span className="text-sm font-medium">Capture meal image</span>
-                        <span className="text-xs text-muted-foreground">
-                          Opens your camera for a fresh meal photo.
-                        </span>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          aria-label="Capture meal image"
-                          className="hidden"
-                          onChange={(event) => handleImageUpload(activeMeal, event)}
-                        />
-                      </label>
-                      <div className="glass-surface flex h-44 items-center justify-center overflow-hidden rounded-lg">
-                        {activeMealLog.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={activeMealLog.image}
-                            alt={`${mealLabels[activeMeal]} preview`}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <p className="px-4 text-center text-sm text-muted-foreground">
-                            Meal image preview
-                          </p>
-                        )}
                       </div>
+                      <p className="text-sm font-medium">
+                        Meal photos are captured only from the smart camera page.
+                      </p>
+                      <p className="max-w-md text-xs text-muted-foreground">
+                        No gallery upload is supported on the dashboard, so every
+                        meal image comes from the live camera flow.
+                      </p>
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">

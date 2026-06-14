@@ -14,7 +14,6 @@ import {
   Utensils,
 } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,

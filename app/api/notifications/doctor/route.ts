@@ -198,11 +198,6 @@ export async function GET(request: Request) {
   });
 }
 
-function getDueReminders(snapshot: SnapshotRow, now: Date) {
-  const reminderSet = getReminderCandidates(snapshot, now);
-  return getDueRemindersFromCandidates(reminderSet.reminders, reminderSet.localNow.minutes);
-}
-
 function getReminderCandidates(snapshot: SnapshotRow, now: Date) {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
