@@ -12,8 +12,8 @@ import {
   Sun,
   Utensils,
 } from "lucide-react";
+import { HealthSyncStatus } from "@/components/sync-status";
 import { AppNav } from "@/components/app-nav";
-import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,7 +27,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { requireSignedInUser } from "@/lib/auth";
-import { getBrowserTimezone, prepareLocalUserSession, saveHealthStateWithHistory } from "@/lib/health-sync";
+import { getBrowserTimezone, prepareLocalUserSession, saveHealthStateWithHistory, validateHealthProfile } from "@/lib/health-sync";
+import { signInDestination } from "@/lib/return-path";
 import { enablePushNotifications } from "@/lib/push-notifications";
 
 type MealType = "breakfast" | "lunch" | "dinner";
@@ -69,7 +70,7 @@ const defaultProfile: Profile = {
 };
 
 const goals = ["More energy", "Better sleep", "Balanced meals", "More discipline"];
-const steps = ["Notify", "You", "Routine", "Goals"];
+const steps = ["You", "Routine", "Goals", "Reminders"];
 
 function createMeals(profile: Profile): MealLog[] {
   return [
@@ -95,6 +96,7 @@ function createMeal(type: MealType, time: string): MealLog {
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<Profile>(defaultProfile);
   const [notificationChoice, setNotificationChoice] = useState<"later" | "enabled" | "unset">("unset");
   const [notificationHelp, setNotificationHelp] = useState("");
@@ -114,13 +116,13 @@ export default function OnboardingPage() {
 
   const progress = Math.round(((step + 1) / 4) * 100);
   const currentStepComplete =
-    (step === 0 && notificationChoice !== "unset") ||
-    (step === 1 && profile.name.trim().length > 0 && profile.primaryGoal.length > 0) ||
-    (step === 2 &&
+    (step === 3 && notificationChoice !== "unset") ||
+    (step === 0 && profile.name.trim().length > 0 && profile.primaryGoal.length > 0) ||
+    (step === 1 &&
       Boolean(profile.breakfastTime) &&
       Boolean(profile.lunchTime) &&
       Boolean(profile.dinnerTime)) ||
-    (step === 3 &&
+    (step === 2 &&
       Boolean(profile.wakeTime) &&
       Boolean(profile.sleepReminder) &&
       profile.waterGoal >= 500);
@@ -133,13 +135,16 @@ export default function OnboardingPage() {
     const result = await enablePushNotifications();
     setNotificationChoice(result === "enabled" ? "enabled" : "later");
     if (result === "ios-install-required") {
-      setNotificationHelp("On iPhone, open Safari, tap Share, Add to Home Screen, then open Dee Meals from the icon and enable notifications there.");
+      setNotificationHelp("On iPhone, open Safari, tap Share, Add to Home Screen, then open Health Monitor from the icon and enable notifications there.");
     } else {
       setNotificationHelp("");
     }
   }
 
   async function finishOnboarding() {
+    if (saving || !currentStepComplete) return;
+    const error = validateHealthProfile({ ...profile, name: profile.name.trim() || "Sweetheart" });
+    if (error) { setNotificationHelp(error); return; }
     const completedProfile = {
       ...profile,
       name: profile.name.trim() || "Sweetheart",
@@ -151,10 +156,10 @@ export default function OnboardingPage() {
       meals: createMeals(completedProfile),
       water: 0,
       sleep: {
-        sleptAt: "23:15",
+        sleptAt: "",
         wokeAt: completedProfile.wakeTime,
-        hours: 7,
-        minutes: 30,
+        hours: 0,
+        minutes: 0,
         quality: "Okay",
       },
       sleepCheckCompleted: false,
@@ -163,70 +168,39 @@ export default function OnboardingPage() {
       notificationPreference: notificationChoice,
     };
 
-    await saveHealthStateWithHistory(appState);
-    window.location.href = "/";
+    setSaving(true);
+    const synced = await saveHealthStateWithHistory(appState).catch(() => false);
+    setSaving(false);
+    if (!synced) { setNotificationHelp("Setup is saved on this device, but cloud sync failed. Retry to finish setup."); return; }
+    window.location.href = signInDestination();
   }
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6">
       <AppNav title="Set up your companion" />
-      <div className="glass-shell mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-6xl flex-col gap-5 rounded-lg p-4 sm:p-6">
-        <section className="glass-dark rounded-lg p-5">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-xl">
-              <BrandLogo className="text-white" dark />
-              <h1 className="mt-4 text-2xl font-semibold tracking-normal sm:text-3xl">
-                Let&apos;s set up your companion.
-              </h1>
-              <p className="mt-2 text-sm leading-6 text-white/70">
-                A few details help the app ask the right questions at the right time.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-4 gap-2 lg:min-w-[520px]">
-              {steps.map((label, index) => (
-                <button
-                  key={label}
-                  type="button"
-                  disabled={index > step}
-                  onClick={() => {
-                    if (index <= step) setStep(index);
-                  }}
-                  className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-center transition ${
-                    index === step
-                      ? "border-white bg-white text-black"
-                      : "border-white/15 bg-white/5 text-white/70"
-                  } ${index > step ? "cursor-not-allowed opacity-50" : ""}`}
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-md border text-xs">
-                    {index < step ? <Check className="h-4 w-4" /> : index + 1}
-                  </span>
-                  <span className="text-xs font-medium sm:text-sm">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+      <HealthSyncStatus />
+      <div className="glass-shell mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-2xl flex-col gap-5 rounded-lg p-4 sm:p-6">
+        <header className="py-4"><h1 className="health-heading">Make it your routine</h1><p className="health-description">A few details, then you&apos;re ready.</p><ol className="mt-6 flex flex-wrap gap-2" aria-label="Setup steps">{steps.map((label, index) => <li key={label} aria-current={index === step ? "step" : undefined} className={`rounded-xl px-3 py-2 text-sm ${index === step ? "bg-primary text-white" : "text-muted-foreground"}`}>{index + 1}. {label}</li>)}</ol></header>
 
         <section className="flex flex-col justify-between gap-6">
           <div className="glass-surface rounded-lg p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium">Onboarding</p>
+              <p className="text-sm font-medium">Step {step + 1} of 4</p>
               <p className="text-sm text-muted-foreground">{progress}%</p>
             </div>
             <Progress value={progress} />
           </div>
 
-          <Card className="min-h-[520px]">
-            {step === 0 && (
+          <Card className="health-flip" key={step}>
+            {step === 3 && (
               <>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-2xl">
                     <Bell className="h-6 w-6 text-primary" />
-                    Enable notifications first
+                    Would you like reminders?
                   </CardTitle>
                   <CardDescription>
-                    Meal, water, morning quote, and sleep reminders work best with notifications.
+                    Get gentle reminders for your routine. You can change your choice later in Settings.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -269,7 +243,7 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {step === 1 && (
+            {step === 0 && (
               <>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-2xl">
@@ -308,7 +282,7 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {step === 2 && (
+            {step === 1 && (
               <>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-2xl">
@@ -353,7 +327,7 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {step === 3 && (
+            {step === 2 && (
               <>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-2xl">
@@ -436,8 +410,8 @@ export default function OnboardingPage() {
                   <ChevronRight />
                 </Button>
               ) : (
-                <Button onClick={finishOnboarding}>
-                  Finish setup
+                <Button disabled={saving || !currentStepComplete} onClick={finishOnboarding}>
+                  {saving ? "Saving…" : "Finish setup"}
                   <Check />
                 </Button>
               )}

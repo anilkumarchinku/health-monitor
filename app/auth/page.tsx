@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { LogIn, Mail, UserPlus } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
+import { HealthSyncStatus } from "@/components/sync-status";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,12 +16,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
-import {
-  loadLatestUserSnapshot,
-  prepareLocalUserSession,
-  storageKey,
-} from "@/lib/health-sync";
+import { restoreAccountDestination } from "@/lib/account-restore";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { signInDestination } from "@/lib/return-path";
 
 export default function AuthPage() {
   const showToast = useToast();
@@ -30,7 +28,7 @@ export default function AuthPage() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [mailLoading, setMailLoading] = useState(false);
-  const supabase = createSupabaseBrowserClient();
+  const [supabase] = useState(createSupabaseBrowserClient);
 
   useEffect(() => {
     async function checkSession() {
@@ -41,20 +39,11 @@ export default function AuthPage() {
       if (user) await continueAfterSignIn(user.id);
     }
 
-    void checkSession();
+    void checkSession().catch(() => setMessage("Could not restore your account. Please try signing in again; your unsynced entries have been kept."));
   }, [supabase]);
 
   async function continueAfterSignIn(userId: string) {
-    prepareLocalUserSession(userId);
-    const latest = await loadLatestUserSnapshot();
-
-    if (latest?.onboardingCompleted) {
-      localStorage.setItem(storageKey, JSON.stringify(latest));
-      window.location.href = "/";
-      return;
-    }
-
-    window.location.href = "/onboarding";
+    window.location.href = await restoreAccountDestination(userId, signInDestination());
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -62,38 +51,39 @@ export default function AuthPage() {
     setMessage("");
 
     if (!supabase) {
-      setMessage("Supabase keys are missing. Add them to .env.local first.");
+      setMessage("Sign-in is temporarily unavailable. Please try again later.");
       return;
     }
 
     setLoading(true);
-    const credentials = { email: email.trim(), password };
-    const { data, error } =
-      mode === "sign-in"
-        ? await supabase.auth.signInWithPassword(credentials)
-        : await supabase.auth.signUp(credentials);
+    try {
+      const credentials = { email: email.trim(), password };
+      const { data, error } =
+        mode === "sign-in"
+          ? await supabase.auth.signInWithPassword(credentials)
+          : await supabase.auth.signUp(credentials);
 
-    setLoading(false);
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
 
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
+      if (mode === "sign-up") {
+        setMessage("Account created. Check your email if Supabase asks for confirmation, then sign in.");
+        showToast("Account created");
+        setMode("sign-in");
+        return;
+      }
 
-    if (mode === "sign-up") {
-      setMessage("Account created. Check your email if Supabase asks for confirmation, then sign in.");
-      showToast("Account created");
-      setMode("sign-in");
-      return;
-    }
+      showToast("Signed in");
+      if (data.user) {
+        await continueAfterSignIn(data.user.id);
+        return;
+      }
 
-    showToast("Signed in");
-    if (data.user) {
-      await continueAfterSignIn(data.user.id);
-      return;
-    }
-
-    window.location.href = "/onboarding";
+      window.location.href = `/onboarding?next=${encodeURIComponent(signInDestination())}`;
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not sign in. Please retry."); }
+    finally { setLoading(false); }
   }
 
   async function sendMagicLink() {
@@ -101,7 +91,7 @@ export default function AuthPage() {
     const trimmedEmail = email.trim();
 
     if (!supabase) {
-      setMessage("Supabase keys are missing. Add them to .env.local first.");
+      setMessage("Sign-in is temporarily unavailable. Please try again later.");
       return;
     }
 
@@ -111,21 +101,22 @@ export default function AuthPage() {
     }
 
     setMailLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: trimmedEmail,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth`,
-      },
-    });
-    setMailLoading(false);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmedEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth?next=${encodeURIComponent(signInDestination())}`,
+        },
+      });
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
 
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    setMessage("Sign-in link sent. Open your email and tap the link to continue.");
-    showToast("Magic link sent");
+      setMessage("Sign-in link sent. Open your email and tap the link to continue.");
+      showToast("Magic link sent");
+    } catch { setMessage("Could not send the sign-in link. Please retry."); }
+    finally { setMailLoading(false); }
   }
 
   return (
@@ -166,7 +157,8 @@ export default function AuthPage() {
                 />
               </div>
 
-              {message && <p className="text-sm text-muted-foreground">{message}</p>}
+              {message && <p role="status" className="text-sm text-muted-foreground">{message}</p>}
+              <HealthSyncStatus />
 
               <Button className="w-full" disabled={loading}>
                 {mode === "sign-in" ? <LogIn /> : <UserPlus />}

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
+import { sendSafePushNotification } from "@/lib/push-server";
+import { consumeRateLimit } from "@/lib/server-rate-limit";
 import { createClient } from "@supabase/supabase-js";
 
 type TestPushBody = {
@@ -37,10 +39,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in before sending a test push." }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as TestPushBody;
-  const currentEndpoint = body.endpoint?.trim();
+  const rawBody = await request.text();
+  if (Buffer.byteLength(rawBody, "utf8") > 4096) {
+    return NextResponse.json({ error: "Request is too large." }, { status: 413 });
+  }
+  let body: TestPushBody;
+  try { body = JSON.parse(rawBody || "{}"); } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+  const currentEndpoint = typeof body?.endpoint === "string" ? body.endpoint.trim() : undefined;
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  try {
+    if (!await consumeRateLimit(adminClient, `push-test:${user.id}`, 5, 3600)) {
+      return NextResponse.json({ error: "Test notification limit reached. Try again later." }, { status: 429 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Test notifications are temporarily unavailable." }, { status: 503 });
+  }
   let query = adminClient
     .from("push_subscriptions")
     .select("id, endpoint, subscription")
@@ -82,7 +98,7 @@ export async function POST(request: Request) {
   await Promise.all(
     data.map(async (row) => {
       try {
-        await webpush.sendNotification(
+        await sendSafePushNotification(
           row.subscription,
           JSON.stringify({
             title: "Meal reminder",

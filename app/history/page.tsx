@@ -1,392 +1,48 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  ChevronDown,
-  Droplets,
-  Moon,
-  Sparkles,
-  Utensils,
-} from "lucide-react";
+import { Download, Utensils, Droplets, Moon } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { BrandLogo } from "@/components/brand-logo";
+import { HealthReportExport } from "@/components/health-report-export";
+import { MedicineProgress } from "@/components/medicine-progress";
+import { HealthSyncStatus } from "@/components/sync-status";
+import { MealImage } from "@/components/meal-image";
 import { requireSignedInUser } from "@/lib/auth";
-import {
-  getLocalDateForState,
-  loadSyncedHistory,
-  saveHealthHistory,
-  storageKey,
-} from "@/lib/health-sync";
-import { morningQuotes } from "@/lib/morning-quotes";
+import { loadSyncedHistory, prepareLocalUserSession, isSupabaseConfigured, type HealthState } from "@/lib/health-sync";
+import { normaliseDay, mealLabels, formatTime, type DailyHealth } from "@/lib/daily-health";
 
-type MealType = "breakfast" | "lunch" | "dinner";
-type QuoteFeedback = "liked" | "disliked" | null;
-
-type Profile = {
-  name: string;
-  waterGoal: number;
-};
-
-type MealLog = {
-  type: MealType;
-  plannedTime: string;
-  actualTime: string;
-  description: string;
-  image: string;
-  status: "pending" | "logged" | "snoozed" | "skipped";
-};
-
-type SleepLog = {
-  sleptAt: string;
-  wokeAt: string;
-  hours: number;
-  minutes: number;
-  quality: "Great" | "Okay" | "Poor";
-};
-
-type DaySummary = {
-  date: string;
-  profile: Profile;
-  meals: MealLog[];
-  water: number;
-  sleep: SleepLog;
-  quoteIndex: number;
-  quoteFeedback: QuoteFeedback;
-  updatedAt?: string;
-};
-
-const mealLabels: Record<MealType, string> = {
-  breakfast: "Breakfast",
-  lunch: "Lunch",
-  dinner: "Dinner",
-};
-
-const quoteTexts = morningQuotes;
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function formatWater(amount: number) {
-  if (amount >= 1000) return `${(amount / 1000).toFixed(amount % 1000 ? 1 : 0)} L`;
-  return `${amount} ml`;
-}
-
-function formatDate(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(`${date}T00:00:00`));
-}
-
+const filters = ["All", "Meals", "Water", "Sleep", "Medicines"] as const;
 export default function HistoryPage() {
-  const [days, setDays] = useState<DaySummary[]>([]);
-  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    async function loadHistory() {
-    const user = await requireSignedInUser();
-    if (!user) return;
-
-    const savedCurrent = localStorage.getItem(storageKey);
-    let history = await loadSyncedHistory<DaySummary>();
-
-    if (savedCurrent) {
-      try {
-        const current = JSON.parse(savedCurrent) as Partial<DaySummary>;
-        const today = getLocalDateForState(current);
-        if (!current.date || current.date === today) {
-          const todaySummary: DaySummary = {
-            ...(current as DaySummary),
-            date: today,
-            updatedAt: new Date().toISOString(),
-          };
-          history = [
-            todaySummary,
-            ...history.filter((day) => day.date !== today),
-          ].slice(0, 30);
-          await saveHealthHistory(todaySummary);
-        }
-      } catch {
-        localStorage.removeItem(storageKey);
-      }
-    }
-
-    setDays(history);
-    setExpandedDays(
-      history.reduce<Record<string, boolean>>((acc, day, index) => {
-        acc[day.date] = index === 0;
-        return acc;
-      }, {}),
-    );
-    }
-
-    void loadHistory();
+  const [days, setDays] = useState<DailyHealth[]>([]);
+  const [filter, setFilter] = useState<typeof filters[number]>("All");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      if (!isSupabaseConfigured()) throw new Error("Connect your account to see your progress.");
+      const user = await requireSignedInUser(); if (!user) return;
+      prepareLocalUserSession(user.id);
+      setDays((await loadSyncedHistory<HealthState & { date: string }>()).map(normaliseDay));
+    } catch { setError("Could not load your history. Your saved records are still available when your connection returns."); }
+    finally { setLoading(false); }
   }, []);
-
-  const totals = useMemo(() => {
-    const latest = days[0];
-    if (!latest) return null;
-    const mealsLogged = latest.meals.filter((meal) => meal.status === "logged").length;
-    const waterPercent = clamp(
-      Math.round((latest.water / latest.profile.waterGoal) * 100),
-      0,
-      100,
-    );
-    const sleepMinutes = latest.sleep.hours * 60 + latest.sleep.minutes;
-    const sleepPercent = clamp(Math.round((sleepMinutes / 480) * 100), 0, 100);
-    const wellnessScore = Math.round(
-      (mealsLogged / 3) * 40 + (waterPercent / 100) * 35 + (sleepPercent / 100) * 25,
-    );
-    return { mealsLogged, waterPercent, wellnessScore };
-  }, [days]);
-
-  function toggleDay(date: string) {
-    setExpandedDays((current) => ({ ...current, [date]: !current[date] }));
-  }
-
-  function toggleSection(id: string) {
-    setExpandedSections((current) => ({ ...current, [id]: !current[id] }));
-  }
-
-  return (
-    <main className="min-h-screen px-3 py-3 sm:px-5 sm:py-5">
-      <AppNav title="Daily history" />
-      <section className="glass-shell mx-auto max-w-6xl rounded-lg">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <BrandLogo compact />
-              <div>
-                <p className="text-sm text-muted-foreground">Stored health details</p>
-                <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
-                  Daily history
-                </h1>
-              </div>
-            </div>
-            <Button asChild variant="outline">
-              <Link href="/">
-                <ArrowLeft />
-                Dashboard
-              </Link>
-            </Button>
-          </div>
-
-          {totals && (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Metric label="Latest meals" value={`${totals.mealsLogged}/3`} />
-              <Metric label="Latest water" value={`${totals.waterPercent}%`} />
-              <Metric label="Latest score" value={`${totals.wellnessScore}/100`} />
-            </div>
-          )}
-        </div>
-      </section>
-
-      <div className="glass-shell mx-auto mt-5 w-full max-w-6xl space-y-4 rounded-lg p-3 sm:p-5">
-        {days.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>No stored details yet</CardTitle>
-              <CardDescription>
-                Log meals, water, sleep, or quote feedback from the dashboard first.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ) : (
-          days.map((day) => {
-            const mealsLogged = day.meals.filter((meal) => meal.status === "logged").length;
-            const waterPercent = clamp(
-              Math.round((day.water / day.profile.waterGoal) * 100),
-              0,
-              100,
-            );
-            const sleepText = `${day.sleep.hours}h ${day.sleep.minutes}m`;
-
-            return (
-              <Card key={day.date}>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-lg">{formatDate(day.date)}</CardTitle>
-                      <CardDescription>
-                        {mealsLogged}/3 meals, {formatWater(day.water)} water, {sleepText} sleep
-                      </CardDescription>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-expanded={expandedDays[day.date]}
-                      title={expandedDays[day.date] ? "Collapse" : "Expand"}
-                      onClick={() => toggleDay(day.date)}
-                    >
-                      <ChevronDown
-                        className={`transition-transform ${
-                          expandedDays[day.date] ? "rotate-180" : ""
-                        }`}
-                      />
-                    </Button>
-                  </div>
-                </CardHeader>
-
-                {expandedDays[day.date] && (
-                  <CardContent className="space-y-3">
-                    <Section
-                      id={`${day.date}-total`}
-                      icon={<Sparkles className="h-4 w-4" />}
-                      title="Total summary"
-                      expanded={expandedSections[`${day.date}-total`] ?? true}
-                      onToggle={toggleSection}
-                    >
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <Metric label="Meals logged" value={`${mealsLogged}/3`} />
-                        <Metric label="Water progress" value={`${waterPercent}%`} />
-                        <Metric label="Sleep" value={sleepText} />
-                      </div>
-                    </Section>
-
-                    <Section
-                      id={`${day.date}-meals`}
-                      icon={<Utensils className="h-4 w-4" />}
-                      title="Meals"
-                      expanded={expandedSections[`${day.date}-meals`] ?? false}
-                      onToggle={toggleSection}
-                    >
-                      <div className="grid gap-3 md:grid-cols-3">
-                        {day.meals.map((meal) => (
-                          <div key={meal.type} className="glass-surface rounded-lg p-4">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-medium">{mealLabels[meal.type]}</p>
-                              <Badge variant={meal.status === "logged" ? "default" : "outline"}>
-                                {meal.status}
-                              </Badge>
-                            </div>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                              {meal.description || "No meal description."}
-                            </p>
-                            {meal.image && (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={meal.image}
-                                alt={`${mealLabels[meal.type]} meal`}
-                                className="mt-3 aspect-[4/3] w-full rounded-md object-cover"
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </Section>
-
-                    <Section
-                      id={`${day.date}-water`}
-                      icon={<Droplets className="h-4 w-4" />}
-                      title="Water"
-                      expanded={expandedSections[`${day.date}-water`] ?? false}
-                      onToggle={toggleSection}
-                    >
-                      <div className="glass-surface rounded-lg p-4">
-                        <div className="mb-3 flex items-center justify-between gap-4">
-                          <p className="font-medium">{formatWater(day.water)}</p>
-                          <Badge variant="secondary">Goal {formatWater(day.profile.waterGoal)}</Badge>
-                        </div>
-                        <Progress value={waterPercent} />
-                      </div>
-                    </Section>
-
-                    <Section
-                      id={`${day.date}-sleep`}
-                      icon={<Moon className="h-4 w-4" />}
-                      title="Sleep"
-                      expanded={expandedSections[`${day.date}-sleep`] ?? false}
-                      onToggle={toggleSection}
-                    >
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <Metric label="Slept at" value={day.sleep.sleptAt} />
-                        <Metric label="Woke at" value={day.sleep.wokeAt} />
-                        <Metric label="Quality" value={day.sleep.quality} />
-                      </div>
-                    </Section>
-
-                    <Section
-                      id={`${day.date}-quote`}
-                      icon={<Sparkles className="h-4 w-4" />}
-                      title="Morning quote"
-                      expanded={expandedSections[`${day.date}-quote`] ?? false}
-                      onToggle={toggleSection}
-                    >
-                      <div className="glass-surface rounded-lg p-4">
-                        <p className="font-medium leading-7">
-                          {quoteTexts[day.quoteIndex] ?? quoteTexts[0]}
-                        </p>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Feedback: {day.quoteFeedback ?? "not reviewed"}
-                        </p>
-                      </div>
-                    </Section>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })
-        )}
-      </div>
-    </main>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="glass-surface rounded-lg p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-lg font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function Section({
-  id,
-  icon,
-  title,
-  expanded,
-  onToggle,
-  children,
-}: {
-  id: string;
-  icon: React.ReactNode;
-  title: string;
-  expanded: boolean;
-  onToggle: (id: string) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-white/55 bg-white/35 backdrop-blur-xl">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-3 p-4 text-left"
-        aria-expanded={expanded}
-        onClick={() => onToggle(id)}
-      >
-        <span className="flex items-center gap-2 font-medium">
-          {icon}
-          {title}
-        </span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
-      </button>
-      {expanded && <div className="space-y-3 border-t p-4">{children}</div>}
-    </div>
-  );
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("filter") === "medicines") setFilter("Medicines"); void load(); }, [load]);
+  return <main className="health-page"><AppNav /><div className="health-content">
+    <h1 className="health-heading">Your progress</h1><p className="health-description">Small steps, saved over time.</p>
+    <details className="my-6 rounded-2xl border border-border bg-white/50 p-4"><summary className="flex min-h-11 cursor-pointer items-center gap-3 font-semibold"><Download size={20} />Download or share your report</summary><div className="mt-4"><HealthReportExport /></div></details>
+    <div className="health-segments" aria-label="Filter records">{filters.map(value => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{value}</button>)}</div>
+    {filter === "Medicines" ? <MedicineProgress /> : <section className="health-flip" key={filter} aria-label={`${filter} history`}>
+      {loading && <p role="status">Loading your records…</p>}
+      {error && <p className="health-notice health-error" role="alert">{error} <button className="underline" onClick={() => void load()}>Retry</button></p>}
+      {!loading && !error && days.length === 0 && <div className="health-notice"><p>No meal, water or sleep records yet. Start with one small step today.</p><Link className="mt-3 inline-block font-semibold underline" href="/">Go to Today</Link></div>}
+      {days.map(day => <details key={day.date} className="border-b border-border py-2"><summary className="min-h-14 cursor-pointer py-4"><span className="font-semibold">{day.date ? new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "Saved day"}</span>{day.syncPending && <span className="ml-3 text-xs text-amber-800">Waiting to sync</span>}<span className="mt-1 block text-sm text-muted-foreground">{day.meals.filter(meal => meal.status === "logged").length} meals · {day.water} ml water{day.sleepCheckCompleted ? ` · ${day.sleep.hours}h ${day.sleep.minutes}m sleep` : ""}</span></summary><div className="space-y-5 pb-5">
+        {(filter === "All" || filter === "Meals") && <section><h3 className="mb-2 flex items-center gap-2 font-semibold"><Utensils size={17} />Meals</h3>{day.meals.map(meal => <div key={meal.type} className="border-b py-3 text-sm"><p className="font-semibold">{mealLabels[meal.type]} · {meal.status === "logged" ? "Logged" : meal.status === "skipped" ? "Skipped" : "Not logged"}</p>{meal.status === "logged" && <p className="mt-1">{formatTime(meal.actualTime)} · {meal.description || "Meal recorded"}</p>}{meal.notes && <p className="mt-1 text-muted-foreground">{meal.notes}</p>}{meal.image && <MealImage image={meal.image} alt={`${mealLabels[meal.type]} on ${day.date}`} className="mt-3 max-h-48 rounded-xl object-cover" />}</div>)}</section>}
+        {(filter === "All" || filter === "Water") && <p className="flex items-center gap-2 text-sm"><Droplets size={17} />Water: {day.water} / {day.profile.waterGoal} ml</p>}
+        {(filter === "All" || filter === "Sleep") && <p className="flex items-center gap-2 text-sm"><Moon size={17} />{day.sleepCheckCompleted ? `Sleep: ${day.sleep.hours}h ${day.sleep.minutes}m · ${day.sleep.quality}` : "Sleep: no check-in recorded"}</p>}
+      </div></details>)}
+    </section>}
+    {filter === "All" && <div className="mt-8 border-t pt-6"><MedicineProgress /></div>}
+  </div><HealthSyncStatus /></main>;
 }

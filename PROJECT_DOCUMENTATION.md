@@ -28,6 +28,7 @@ The project is built as a Progressive Web App using Next.js, Supabase, Vercel, W
 - UI: React 19, Tailwind CSS, shadcn-style local UI components
 - Icons: lucide-react
 - Backend data: Supabase
+- Separate medicine schedule and dose checklist: `/medicines` (requires `supabase/migrations/20260928115906_medicine_schedule_and_doses.sql`)
 - Auth: Supabase email/password and magic link support
 - Push notifications: Web Push with VAPID keys
 - Deployment: Vercel
@@ -249,6 +250,17 @@ lib/health-sync.ts
 
 Used for authenticated persistence, admin monitoring, cron reminders, and push delivery.
 
+Meal photos use the private `meal-images` Supabase Storage bucket. Run
+`supabase/meal_images_storage.sql` in the Supabase SQL editor before capturing photos.
+Each JPEG is stored under the signed-in user's ID; snapshots keep only an
+`meal-image:<object path>` reference. The app creates temporary signed URLs for
+display. The bucket limits uploads to JPEG files of at most 5 MB.
+
+Older JPEG data URLs encountered during a user's next sync are uploaded to
+Storage and replaced with object references. Existing database rows do not
+change until their owners sync them; a separate backfill is needed for dormant
+accounts.
+
 Main tables:
 
 - `health_snapshots`
@@ -361,6 +373,8 @@ Purpose:
 - Called every minute by cron-job.org.
 - Checks all recent health snapshots.
 - Calculates reminder due status in each user's saved timezone.
+- Uses each subscribed user's latest saved schedule, even when the user has not opened the app for many days.
+- Every Monday at the user's saved wake time, the morning reminder says: "Please be healthy. I'm here to help you out." It replaces that day's usual morning quote, so only one morning push is sent.
 - Sends morning, meal, and sleep notifications.
 - Records delivery in `reminder_deliveries`.
 - Returns diagnostics:
@@ -720,6 +734,7 @@ Healthy response should show:
 If `snapshotsFetched` is 0:
 
 - Schedule is not saved to Supabase.
+- No subscribed user has a saved schedule, or the push subscription has been removed.
 - Run Notification Doctor > Sync schedule.
 
 If `subscriptionsFound` is 0:

@@ -56,7 +56,7 @@ create policy "Authenticated users can read health snapshots"
   on public.health_snapshots
   for select
   to authenticated
-  using (true);
+  using (user_id = auth.uid());
 
 create policy "Users can manage their own push subscriptions"
   on public.push_subscriptions
@@ -64,3 +64,8 @@ create policy "Users can manage their own push subscriptions"
   to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+-- API handlers enforce validation and atomic ownership/version checks.
+revoke all on public.health_snapshots, public.push_subscriptions from anon, authenticated;
+grant select on public.health_snapshots, public.push_subscriptions to authenticated;
+grant select, insert, update, delete on public.health_snapshots, public.push_subscriptions to service_role;

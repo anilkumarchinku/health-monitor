@@ -1,0 +1,89 @@
+{
+  "checkedAt": "2026-10-02T17:13:00.224Z",
+  "project": "avopjsfldiclrhardabs",
+  "scope": "Local app API against live Supabase, with two temporary users; not browser or Vercel deployment verification",
+  "checks": [
+    {
+      "check": "Temporary users can sign in",
+      "passed": true
+    },
+    {
+      "check": "App API save, update and database reload",
+      "passed": true
+    },
+    {
+      "check": "Stale saves rejected",
+      "passed": true
+    },
+    {
+      "check": "Other user cannot read health snapshot",
+      "passed": true
+    },
+    {
+      "check": "Live rate limiter enforces threshold",
+      "passed": true
+    },
+    {
+      "check": "Client cannot call server-only rate limiter",
+      "passed": true
+    },
+    {
+      "check": "Medicine audit events and owner isolation",
+      "passed": true
+    },
+    {
+      "check": "Authenticated JPEG upload and signed download",
+      "passed": true
+    },
+    {
+      "check": "Cross-user photo read and upload blocked",
+      "passed": true
+    },
+    {
+      "check": "All ten new tables deny anonymous access",
+      "passed": true
+    },
+    {
+      "check": "Reminder snapshot lookup",
+      "passed": true
+    },
+    {
+      "check": "Email and push claim functions callable without sending messages",
+      "passed": true
+    }
+  ],
+  "cleanup": [
+    {
+      "item": "temporary photo objects",
+      "ok": true
+    },
+    {
+      "item": "temporary login session",
+      "ok": true
+    },
+    {
+      "item": "temporary login session",
+      "ok": true
+    },
+    {
+      "item": "temporary test user and records",
+      "ok": true
+    },
+    {
+      "item": "temporary test user and records",
+      "ok": true
+    },
+    {
+      "item": "temporary rate-limit counter",
+      "ok": true
+    },
+    {
+      "item": "temporary rate-limit counter",
+      "ok": true
+    },
+    {
+      "item": "temporary rate-limit counter",
+      "ok": true
+    }
+  ]
+}

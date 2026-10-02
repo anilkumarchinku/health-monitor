@@ -1,7 +1,6 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { getMorningQuoteText } from "@/lib/morning-quotes";
 import { syncCurrentLocalStateToSupabase } from "@/lib/health-sync";
 
 type PushStatus =
@@ -23,6 +22,8 @@ export type NotificationDoctorReport = {
   blockers?: string[];
   checks?: {
     hasSnapshot?: boolean;
+    hasMedicineSchedule?: boolean;
+    schedulerFresh?: boolean;
     hasSubscription?: boolean;
     hasVapid?: boolean;
     hasDueReminderNow?: boolean;
@@ -56,12 +57,6 @@ export type NotificationDoctorReport = {
   subscriptions?: unknown[];
   recentDeliveries?: unknown[];
   error?: string;
-};
-
-const mealLabels: Record<string, string> = {
-  breakfast: "breakfast",
-  lunch: "lunch",
-  dinner: "dinner",
 };
 
 const localReminderTimers = new Map<string, number>();
@@ -248,153 +243,38 @@ export async function fetchNotificationDoctor() {
   return payload;
 }
 
-export async function scheduleTodayLocalMealReminders(
-  meals: { type: string; plannedTime: string; status: string }[],
-) {
-  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  const registration = await navigator.serviceWorker.ready;
-
-  meals.forEach((meal) => {
-    if (meal.status === "logged" || !meal.plannedTime) return;
-    const [hour, minute] = meal.plannedTime.split(":").map(Number);
-    const reminderAt = new Date();
-    reminderAt.setHours(hour, minute, 0, 0);
-    const delay = reminderAt.getTime() - Date.now();
-    if (delay < 0 || delay > 24 * 60 * 60 * 1000) return;
-
-    scheduleLocalReminder(`meal-${meal.type}`, delay, () => {
-      const reminderOptions: DeeNotificationOptions = {
-        body: "Tap to capture your meal and check in.",
-        icon: "/icon-192.png",
-        badge: "/badge-72.png",
-        vibrate: [180, 90, 180],
-        silent: false,
-        tag: `${meal.type}-meal-reminder`,
-        data: {
-          url: "/meal/lunch",
-        },
-      };
-
-      void registration.showNotification(
-        `You are late for ${mealLabels[meal.type] ?? "your meal"}`,
-        reminderOptions,
-      );
-    });
-  });
+// Scheduled reminders are delivered by the server even when the app is closed.
+// Clear legacy page timers on each state change so logged/skipped meals cannot fire.
+function clearLocalReminderTimers() {
+  for (const timer of localReminderTimers.values()) window.clearTimeout(timer);
+  localReminderTimers.clear();
 }
 
-export async function scheduleTodayLocalRoutineReminders({
-  meals,
-  wakeTime,
-  sleepReminder,
-  quoteIndex,
-}: {
+export async function scheduleTodayLocalMealReminders(_meals: { type: string; plannedTime: string; status: string }[]) {
+  clearLocalReminderTimers();
+}
+
+export async function scheduleTodayLocalRoutineReminders(_schedule: {
   meals: { type: string; plannedTime: string; status: string }[];
   wakeTime?: string;
   sleepReminder?: string;
   quoteIndex?: number;
 }) {
-  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  const registration = await navigator.serviceWorker.ready;
-  const reminders = [
-    {
-      id: "morning",
-      time: wakeTime,
-      title: "Good morning, sweetheart",
-      body: getMorningQuoteText(quoteIndex),
-      url: "/morning",
-    },
-    ...meals
-      .filter((meal) => meal.status !== "logged")
-      .map((meal) => ({
-        id: meal.type,
-        time: meal.plannedTime,
-        title: `You are late for ${mealLabels[meal.type] ?? "your meal"}`,
-        body: "Tap to capture your meal and check in.",
-        url: "/meal/lunch",
-      })),
-    {
-      id: "sleep",
-      time: sleepReminder,
-      title: "Sleep check-in",
-      body: "Tap to enter when you slept and protect tomorrow's energy.",
-      url: "/",
-    },
-  ];
-
-  reminders.forEach((reminder) => {
-    if (!reminder.time || !/^\d{2}:\d{2}$/.test(reminder.time)) return;
-    const [hour, minute] = reminder.time.split(":").map(Number);
-    const reminderAt = new Date();
-    reminderAt.setHours(hour, minute, 0, 0);
-    const delay = reminderAt.getTime() - Date.now();
-    if (delay < 0 || delay > 24 * 60 * 60 * 1000) return;
-
-    scheduleLocalReminder(`routine-${reminder.id}`, delay, () => {
-      const reminderOptions: DeeNotificationOptions = {
-        body: reminder.body,
-        icon: "/icon-192.png",
-        badge: "/badge-72.png",
-        vibrate: [180, 90, 180],
-        silent: false,
-        tag: `${reminder.id}-routine-reminder`,
-        data: {
-          url: reminder.url,
-        },
-      };
-
-      void registration.showNotification(reminder.title, reminderOptions);
-    });
-  });
+  clearLocalReminderTimers();
 }
 
-export async function scheduleMealSnoozeReminder({
-  mealType,
-  delayMinutes,
-}: {
-  mealType: string;
-  delayMinutes: number;
-}) {
-  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  const registration = await navigator.serviceWorker.ready;
-  scheduleLocalReminder(`snooze-${mealType}`, delayMinutes * 60 * 1000, () => {
-    const reminderOptions: DeeNotificationOptions = {
-      body: "Tap to capture your meal and check in.",
-      icon: "/icon-192.png",
-      badge: "/badge-72.png",
-      vibrate: [180, 90, 180],
-      silent: false,
-      tag: `${mealType}-snoozed-meal-reminder`,
-      data: {
-        url: "/meal/lunch",
-      },
-    };
-
-    void registration.showNotification(
-      `You are late for ${mealLabels[mealType] ?? "your meal"}`,
-      reminderOptions,
-    );
+export async function scheduleMealSnoozeReminder({ mealType, delayMinutes }: { mealType: string; delayMinutes: number }) {
+  const supabase = createSupabaseBrowserClient();
+  const { data: { session } } = await supabase?.auth.getSession() ?? { data: { session: null } };
+  if (!session) throw new Error("Sign in to save a reminder that works when the app is closed.");
+  const response = await fetch("/api/notifications/snooze", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ mealType, delayMinutes }),
   });
-}
-
-function scheduleLocalReminder(key: string, delay: number, callback: () => void) {
-  const existingTimer = localReminderTimers.get(key);
-  if (existingTimer) {
-    window.clearTimeout(existingTimer);
-  }
-
-  const timer = window.setTimeout(() => {
-    localReminderTimers.delete(key);
-    callback();
-  }, delay);
-
-  localReminderTimers.set(key, timer);
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error ?? "Could not save your snooze.");
+  return result as { ok: true; dueAt: string };
 }
 
 function urlBase64ToUint8Array(base64String: string) {

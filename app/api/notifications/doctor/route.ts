@@ -1,3 +1,4 @@
+import { reminderEnabled, reminderPreferences, type ReminderPreferences } from "@/lib/reminder-preferences";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
@@ -14,6 +15,7 @@ type SnapshotRow = {
     dinnerTime?: string;
     sleepReminder?: string;
     timezone?: string;
+    reminderPreferences?: ReminderPreferences;
   } | null;
   meals:
     | {
@@ -94,7 +96,7 @@ export async function GET(request: Request) {
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
-  const [snapshotsResult, subscriptionsResult, deliveriesResult] = await Promise.all([
+  const [snapshotsResult, subscriptionsResult, deliveriesResult, runsResult, medicinesResult] = await Promise.all([
     adminClient
       .from("health_snapshots")
       .select("date, profile, meals, quote_index, updated_at")
@@ -107,14 +109,16 @@ export async function GET(request: Request) {
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false }),
     adminClient
-      .from("reminder_deliveries")
-      .select("date, kind, reminder_key, delivered_at")
+      .from("device_reminder_deliveries")
+      .select("reminder_key,status,attempts,last_error,updated_at")
       .eq("user_id", user.id)
-      .order("delivered_at", { ascending: false })
+      .order("updated_at", { ascending: false })
       .limit(10),
+    adminClient.from("reminder_scheduler_runs").select("status,started_at,finished_at").order("started_at", { ascending: false }).limit(1),
+    adminClient.from("medicines").select("id").eq("user_id", user.id).eq("active", true).limit(1),
   ]);
 
-  if (snapshotsResult.error || subscriptionsResult.error || deliveriesResult.error) {
+  if (snapshotsResult.error || subscriptionsResult.error || deliveriesResult.error || runsResult.error || medicinesResult.error) {
     return NextResponse.json(
       {
         ok: false,
@@ -123,6 +127,8 @@ export async function GET(request: Request) {
           snapshots: snapshotsResult.error?.message,
           subscriptions: subscriptionsResult.error?.message,
           deliveries: deliveriesResult.error?.message,
+          scheduler: runsResult.error?.message,
+          medicines: medicinesResult.error?.message,
         },
       },
       { status: 500 },
@@ -137,17 +143,21 @@ export async function GET(request: Request) {
   const due = reminderSet
     ? getDueRemindersFromCandidates(reminderSet.reminders, reminderSet.localNow.minutes)
     : [];
+  const lastRun = runsResult.data?.[0];
+  const schedulerFresh = Boolean(lastRun?.status === "complete" && lastRun.finished_at && Date.now() - Date.parse(lastRun.finished_at) < 5 * 60_000);
   const checks = {
     hasSnapshot: Boolean(latestSnapshot),
+    hasMedicineSchedule: Boolean(medicinesResult.data?.length),
+    schedulerFresh,
     hasSubscription: subscriptions.length > 0,
     hasVapid: Boolean(vapidPublicKey && vapidPrivateKey),
     hasDueReminderNow: due.length > 0,
   };
   const blockers = [
-    !checks.hasSnapshot ? "No health snapshot/schedule saved for this signed-in user." : null,
+    !checks.hasSnapshot && !checks.hasMedicineSchedule ? "No health snapshot/schedule saved for this signed-in user." : null,
     !checks.hasSubscription ? "No push subscription saved for this signed-in user/device." : null,
     !checks.hasVapid ? "VAPID push keys are missing on the server." : null,
-    !checks.hasDueReminderNow ? "No reminder is currently inside the send window." : null,
+    !checks.schedulerFresh ? "Scheduler has no successful run within the last five minutes." : null,
   ].filter(Boolean);
 
   return NextResponse.json({
@@ -155,6 +165,7 @@ export async function GET(request: Request) {
     env,
     user: { id: user.id, email: user.email },
     checks,
+    scheduler: lastRun ?? null,
     blockers,
     counts: {
       snapshots: snapshotsResult.data?.length ?? 0,
@@ -202,6 +213,7 @@ function getReminderCandidates(snapshot: SnapshotRow, now: Date) {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
   const mealsForToday = snapshot.date === localNow.date ? snapshot.meals : null;
+  const isMonday = reminderPreferences(profile.reminderPreferences).monday && new Date(`${localNow.date}T12:00:00Z`).getUTCDay() === 1;
   const mealCopy: Record<MealType, { title: string; body: string; url: string }> = {
     breakfast: {
       title: "You are late for breakfast",
@@ -223,20 +235,20 @@ function getReminderCandidates(snapshot: SnapshotRow, now: Date) {
     {
       kind: "morning",
       time: profile.wakeTime ?? "",
-      title: "Good morning, sweetheart",
-      body: getMorningQuoteText(snapshot.quote_index ?? 0),
+      title: isMonday ? "Monday health check-in" : "Good morning",
+      body: isMonday ? "Please be healthy. I'm here to help you out." : getMorningQuoteText(snapshot.quote_index ?? 0),
       url: "/morning",
       sendUntilMinutes: getSegmentEndMinutes(profile.wakeTime, profile.breakfastTime),
     },
     ...(["breakfast", "lunch", "dinner"] as MealType[]).map((type) => {
       const meal = mealsForToday?.find((item) => item.type === type);
-      const time = meal?.plannedTime ?? profile[`${type}Time` as keyof typeof profile] ?? "";
+      const time = meal?.plannedTime ?? profile[`${type}Time` as "breakfastTime" | "lunchTime" | "dinnerTime"] ?? "";
       return {
         kind: type,
         time,
         title: mealCopy[type].title,
         body: mealCopy[type].body,
-        url: mealCopy[type].url,
+        url: `/meals?meal=${type}`,
         status: meal?.status,
         sendUntilMinutes: getMealSegmentEndMinutes(type, profile, time),
       };
@@ -251,7 +263,7 @@ function getReminderCandidates(snapshot: SnapshotRow, now: Date) {
     },
   ];
 
-  return { localNow, reminders };
+  return { localNow, reminders: reminders.filter(reminder => reminderEnabled(profile.reminderPreferences, reminder.kind, localNow.date)) };
 }
 
 function getDueRemindersFromCandidates(reminders: DoctorReminder[], currentLocalMinutes: number) {
@@ -349,7 +361,7 @@ function getLocalDateParts(date: Date, timezone: string) {
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
+      hourCycle: "h23",
     }).formatToParts(date);
   } catch {
     resolvedTimezone = "UTC";
@@ -360,7 +372,7 @@ function getLocalDateParts(date: Date, timezone: string) {
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
+      hourCycle: "h23",
     }).formatToParts(date);
   }
 

@@ -7,8 +7,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Dee Meal Monitor System",
-  description: "A friendly meal, water, sleep, and motivation tracker.",
+  title: "Health Monitor",
+  description: "Your meals, medicines, water and sleep, one check-in at a time.",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon.svg",
@@ -16,13 +16,13 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "Dee Meals",
+    title: "Health Monitor",
     statusBarStyle: "default",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#15736d",
+  themeColor: "#386748",
   width: "device-width",
   initialScale: 1,
 };
@@ -33,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth">
       <body className={inter.className}>
         <ToastProvider>
           <ReminderSound />

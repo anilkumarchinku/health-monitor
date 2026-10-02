@@ -13,3 +13,7 @@ pnpm-debug.log*
 
 .DS_Store
 .gitnexus
+
+# Local tooling output
+*.tsbuildinfo
+supabase/.temp/

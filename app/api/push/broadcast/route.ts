@@ -1,92 +1,101 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
+import { sendSafePushNotification } from "@/lib/push-server";
+import { consumeRateLimit } from "@/lib/server-rate-limit";
 
-type BroadcastBody = {
-  title?: string;
-  body?: string;
-  url?: string;
-};
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
-type SubscriptionRow = {
-  id: string;
-  endpoint: string;
-  subscription: webpush.PushSubscription;
-};
+type BroadcastBody = { campaignId?: string; title?: string; body?: string; url?: string };
+type ClaimedDevice = { subscription_id: string; subscription: webpush.PushSubscription; attempts: number };
+const DEFAULT_CAMPAIGN = "health-monitor-back-live-2026-09";
 
 export async function POST(request: Request) {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return NextResponse.json({ error: "Cron secret is not configured." }, { status: 500 });
+  if (request.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key, NEXT_PUBLIC_VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey } = process.env;
+  if (!url || !key || !publicKey || !privateKey) return NextResponse.json({ error: "Broadcast env vars are missing." }, { status: 503 });
+  const raw = await request.text();
+  if (Buffer.byteLength(raw, "utf8") > 4096) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
+  let body: BroadcastBody;
+  try { body = JSON.parse(raw || "{}"); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+    (body.campaignId !== undefined && (typeof body.campaignId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(body.campaignId))) ||
+    (body.title !== undefined && (typeof body.title !== "string" || body.title.length > 120)) ||
+    (body.body !== undefined && (typeof body.body !== "string" || body.body.length > 500)) ||
+    (body.url !== undefined && (typeof body.url !== "string" || !body.url.startsWith("/") || body.url.startsWith("//") || /[\\\x00-\x20]/.test(body.url)))) {
+    return NextResponse.json({ error: "Invalid broadcast message." }, { status: 400 });
   }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey) {
-    return NextResponse.json({ error: "Broadcast env vars are missing." }, { status: 500 });
+  if (!body.campaignId && (body.title !== undefined || body.body !== undefined || body.url !== undefined)) {
+    return NextResponse.json({ error: "Custom messages require a stable campaignId. Reuse that ID for every retry." }, { status: 400 });
   }
-
-  const body = (await request.json().catch(() => ({}))) as BroadcastBody;
-  const payload = {
+  const campaignId = body.campaignId ?? DEFAULT_CAMPAIGN;
+  const requestedPayload = {
     title: body.title?.trim() || "Dee Meals is back",
     body: body.body?.trim() || "We are back. Tap to check your meals, water, and sleep.",
-    url: body.url || "/",
-    tag: "dee-meals-broadcast",
-    icon: "/icon-192.png",
-    badge: "/badge-72.png",
+    url: body.url || "/", tag: `broadcast-${campaignId}`, icon: "/icon-192.png", badge: "/badge-72.png",
   };
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
-  const { data, error } = await supabase
-    .from("push_subscriptions")
-    .select("id, endpoint, subscription")
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:hello@health-monitor-amber.vercel.app",
-    vapidPublicKey,
-    vapidPrivateKey,
-  );
-
+  const db = createClient(url, key);
   let sent = 0;
+  let staleDeleted = 0;
   const failures: string[] = [];
-  const staleIds: string[] = [];
-
-  await Promise.all(
-    ((data ?? []) as SubscriptionRow[]).map(async (subscriptionRow) => {
-      try {
-        await webpush.sendNotification(subscriptionRow.subscription, JSON.stringify(payload));
-        sent += 1;
-      } catch (pushError) {
-        const statusCode =
-          typeof pushError === "object" && pushError && "statusCode" in pushError
-            ? Number(pushError.statusCode)
-            : undefined;
-        if (statusCode === 404 || statusCode === 410) {
-          staleIds.push(subscriptionRow.id);
+  try {
+    const { data: existing, error: lookupError } = await db.from("push_broadcast_campaigns").select("payload").eq("id", campaignId).maybeSingle();
+    if (lookupError) throw new Error("Broadcast campaign storage is unavailable.");
+    if (!existing) {
+      if (!await consumeRateLimit(db, "push-broadcast:create", 1, 3600)) return NextResponse.json({ error: "A new broadcast was already started this hour." }, { status: 429 });
+      const { error } = await db.from("push_broadcast_campaigns").insert({ id: campaignId, payload: requestedPayload });
+      if (error && error.code !== "23505") throw new Error("Could not save the broadcast campaign.");
+    }
+    const { data: campaign, error: campaignError } = await db.from("push_broadcast_campaigns").select("payload").eq("id", campaignId).single();
+    if (campaignError || !campaign) throw new Error("Could not load the saved broadcast.");
+    // A continuation containing only campaignId uses the exact originally stored message.
+    if ((body.title !== undefined || body.body !== undefined || body.url !== undefined) &&
+      Object.entries(requestedPayload).some(([key, value]) => campaign.payload[key] !== value)) {
+      return NextResponse.json({ error: "This campaign already has a different message. Its payload cannot change during retries." }, { status: 409 });
+    }
+    if (!await consumeRateLimit(db, "push-broadcast:dispatch", 1, 30)) return NextResponse.json({ campaignId, deferred: true, mayHaveMore: true, error: "Wait 30 seconds before continuing this campaign." }, { status: 429 });
+    const { data: audienceComplete, error: enqueueError } = await db.rpc("enqueue_push_broadcast", { p_campaign_id: campaignId });
+    if (enqueueError) throw new Error("Could not enqueue the next audience page.");
+    const token = crypto.randomUUID();
+    const { data, error: claimError } = await db.rpc("claim_push_broadcast", { p_campaign_id: campaignId, p_token: token });
+    if (claimError) throw new Error("Could not claim pending broadcast deliveries.");
+    webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:hello@health-monitor-amber.vercel.app", publicKey, privateKey);
+    const rows = (data ?? []) as ClaimedDevice[];
+    for (let offset = 0; offset < rows.length; offset += 5) {
+      const outcomes = await Promise.allSettled(rows.slice(offset, offset + 5).map(async (row) => {
+        let status = "accepted";
+        let lastError: string | null = null;
+        try { await sendSafePushNotification(row.subscription, JSON.stringify(campaign.payload)); }
+        catch (error) {
+          const code = typeof error === "object" && error && "statusCode" in error ? Number(error.statusCode) : 0;
+          status = code === 404 || code === 410 ? "stale" : row.attempts < 5 && (code === 0 || code === 429 || code >= 500) ? "retry" : "failed";
+          lastError = `Push rejected (${code || "network or invalid subscription"}).`;
+          failures.push(`${row.subscription_id}: ${lastError}`);
         }
-        failures.push(`${subscriptionRow.endpoint.slice(0, 48)}...${statusCode ? ` (${statusCode})` : ""}`);
-      }
-    }),
-  );
-
-  if (staleIds.length > 0) {
-    await supabase.from("push_subscriptions").delete().in("id", staleIds);
+        const { data: saved, error } = await db.from("push_broadcast_deliveries").update({ status, last_error: lastError, lease_token: null, lease_until: null, next_attempt_at: new Date(Date.now() + Math.min(3600, 60 * 2 ** (row.attempts - 1)) * 1000).toISOString(), updated_at: new Date().toISOString() })
+          .eq("campaign_id", campaignId).eq("subscription_id", row.subscription_id).eq("lease_token", token).select("subscription_id").maybeSingle();
+        if (error || !saved) throw new Error("Broadcast result could not be saved. Continue the same campaign after the lease expires.");
+        if (status === "accepted") sent++;
+        if (status === "stale") {
+          const { error: deleteError } = await db.from("push_subscriptions").delete().eq("id", row.subscription_id);
+          if (deleteError) throw new Error("Stale device cleanup failed.");
+          staleDeleted++;
+        }
+      }));
+      const rejected = outcomes.find((outcome) => outcome.status === "rejected");
+      if (rejected?.status === "rejected") throw rejected.reason;
+    }
+    const [pending, total, failed] = await Promise.all([
+      db.from("push_broadcast_deliveries").select("subscription_id", { count: "exact", head: true }).eq("campaign_id", campaignId).in("status", ["pending", "retry", "sending"]),
+      db.from("push_broadcast_deliveries").select("subscription_id", { count: "exact", head: true }).eq("campaign_id", campaignId),
+      db.from("push_broadcast_deliveries").select("subscription_id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("status", "failed"),
+    ]);
+    if (pending.error || total.error || failed.error) throw new Error("Could not read campaign progress.");
+    return NextResponse.json({ campaignId, sent, totalSubscriptions: total.count ?? 0, staleDeleted, failures, pending: pending.count ?? 0, failed: failed.count ?? 0, audienceComplete: audienceComplete === true, mayHaveMore: audienceComplete !== true || Boolean(pending.count) });
+  } catch (error) {
+    return NextResponse.json({ campaignId, sent, staleDeleted, failures, mayHaveMore: true, error: error instanceof Error ? error.message : "Broadcast interrupted. Retry the same campaign." }, { status: 503 });
   }
-
-  return NextResponse.json({
-    sent,
-    totalSubscriptions: data?.length ?? 0,
-    staleDeleted: staleIds.length,
-    failures,
-  });
 }

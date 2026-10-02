@@ -1,7 +1,10 @@
+import { reminderEnabled, reminderPreferences, type ReminderPreferences } from "@/lib/reminder-preferences";
 import { NextResponse } from "next/server";
-import { SupabaseClient, createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { getMorningQuoteText } from "@/lib/morning-quotes";
+import { claimDeviceReminder, finishDeviceReminder, dueMedicineDate } from "@/lib/reminder-delivery";
+import { sendSafePushNotification } from "@/lib/push-server";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -16,6 +19,7 @@ type HealthSnapshotRow = {
     dinnerTime?: string;
     sleepReminder?: string;
     timezone?: string;
+    reminderPreferences?: ReminderPreferences;
   } | null;
   meals:
     | {
@@ -31,6 +35,16 @@ type PushSubscriptionRow = {
   user_id: string;
   subscription: webpush.PushSubscription;
 };
+
+type MedicineScheduleRow = {
+  id: string;
+  user_id: string;
+  schedule_time: string;
+  timezone: string;
+  food_rule: "with_food" | "before_food" | "none";
+};
+
+const SUBSCRIPTION_PAGE_SIZE = 500;
 
 type ReminderKind = MealType | "morning" | "sleep";
 
@@ -61,205 +75,129 @@ type ReminderTiming = {
 const DEFAULT_REMINDER_WINDOW_MINUTES = 30;
 const MIN_REMINDER_WINDOW_MINUTES = 30;
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey) {
-    return NextResponse.json(
-      { error: "Missing cron env vars. Add SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, and VAPID keys." },
-      { status: 500 },
-    );
-  }
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:hello@health-monitor-amber.vercel.app",
-    vapidPublicKey,
-    vapidPrivateKey,
-  );
-
+  if (!process.env.CRON_SECRET) return NextResponse.json({ error: "Cron secret is not configured." }, { status: 500 });
+  if (request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key, NEXT_PUBLIC_VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey } = process.env;
+  if (!url || !key || !publicKey || !privateKey) return NextResponse.json({ error: "Missing scheduler configuration." }, { status: 503 });
+  const db = createClient(url, key);
+  const runId = crypto.randomUUID();
+  const started = Date.now();
   const now = new Date();
-  const earliestDate = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  const { data: snapshots, error: snapshotError } = await supabase
-    .from("health_snapshots")
-    .select("user_id, date, profile, meals, quote_index")
-    .not("user_id", "is", null)
-    .gte("date", earliestDate);
-
-  if (snapshotError) {
-    return NextResponse.json({ error: snapshotError.message }, { status: 500 });
-  }
-
   let sent = 0;
   let skipped = 0;
-  let snapshotsChecked = 0;
-  let dueReminders = 0;
-  let alreadyDelivered = 0;
-  let subscriptionsFound = 0;
+  let checked = 0;
   const failures: string[] = [];
-  const staleSubscriptionIds: string[] = [];
-  const scheduleDiagnostics: {
-    userId: string;
-    snapshotDate: string;
-    localDate: string;
-    localTime: string;
-    timezone: string;
-    subscriptions: number;
-    reminders: {
-      kind: ReminderKind;
-      time: string;
-      status: ReminderTiming["status"];
-      minutesUntil?: number;
-      minutesLate?: number;
-      expiresIn?: number;
-      expiredBy?: number;
-    }[];
-  }[] = [];
-  const reminderWindowMinutes = getReminderWindowMinutes();
-
-  for (const snapshot of (snapshots ?? []) as HealthSnapshotRow[]) {
-    if (!snapshot.user_id) continue;
-    snapshotsChecked += 1;
-
-    const { data: subscriptions } = await supabase
-      .from("push_subscriptions")
-      .select("id, user_id, subscription")
-      .eq("user_id", snapshot.user_id);
-    subscriptionsFound += subscriptions?.length ?? 0;
-
-    const reminderSet = getReminderCandidates(snapshot, now);
-    const reminders = getDueRemindersFromCandidates(
-      reminderSet.candidates,
-      reminderSet.localNow.minutes,
-    );
-    if (scheduleDiagnostics.length < 10) {
-      scheduleDiagnostics.push({
-        userId: `${snapshot.user_id.slice(0, 8)}...`,
-        snapshotDate: snapshot.date,
-        localDate: reminderSet.localNow.date,
-        localTime: reminderSet.localNow.time,
-        timezone: reminderSet.localNow.timezone,
-        subscriptions: subscriptions?.length ?? 0,
-        reminders: reminderSet.candidates.map((reminder) => {
-          const timing = getReminderTiming(
-            reminder.time,
-            reminderSet.localNow.minutes,
-            reminder.sendUntilMinutes,
-          );
-          return {
-            kind: reminder.kind,
-            time: reminder.time,
-            status: timing.status,
-            minutesUntil: timing.minutesUntil,
-            minutesLate: timing.minutesLate,
-            expiresIn: timing.expiresIn,
-            expiredBy: timing.expiredBy,
-          };
-        }),
-      });
+  const ensureTime = () => { if (Date.now() - started > 20_000) throw new Error("Scheduler batch deadline reached; remaining work will retry on the next run."); };
+  try {
+    const { error: runError } = await db.from("reminder_scheduler_runs").insert({ id: runId, status: "running" });
+    if (runError) throw new Error(`Scheduler heartbeat: ${runError.message}`);
+    webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:hello@health-monitor-amber.vercel.app", publicKey, privateKey);
+    const subscriptionsByUser = new Map<string, PushSubscriptionRow[]>();
+    for (let offset = 0; ; offset += SUBSCRIPTION_PAGE_SIZE) {
+      ensureTime();
+      const { data, error } = await db.from("push_subscriptions").select("id,user_id,subscription").order("id").range(offset, offset + SUBSCRIPTION_PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      for (const row of (data ?? []) as PushSubscriptionRow[]) subscriptionsByUser.set(row.user_id, [...(subscriptionsByUser.get(row.user_id) ?? []), row]);
+      if ((data?.length ?? 0) < SUBSCRIPTION_PAGE_SIZE) break;
     }
-
-    if (reminders.length === 0) {
-      skipped += 1;
-      continue;
-    }
-    dueReminders += reminders.length;
-
-    if (!subscriptions || subscriptions.length === 0) {
-      skipped += reminders.length;
-      continue;
-    }
-
-    for (const reminder of reminders) {
-      const shouldSend = await reserveReminder(
-        supabase,
-        snapshot.user_id,
-        reminder.localDate,
-        reminder.kind,
-        reminder.deliveryKey,
-      );
-      if (!shouldSend) {
-        alreadyDelivered += 1;
-        continue;
-      }
-
-      let reminderSent = 0;
-      await Promise.all(
-        ((subscriptions ?? []) as PushSubscriptionRow[]).map(async (subscriptionRow) => {
-          try {
-            await webpush.sendNotification(
-              subscriptionRow.subscription,
-              JSON.stringify({
-                title: reminder.title,
-                body: reminder.body,
-                url: reminder.url,
-                tag: `${reminder.localDate}-${reminder.kind}-reminder`,
-                icon: "/icon-192.png",
-                badge: "/badge-72.png",
-              }),
-            );
-            sent += 1;
-            reminderSent += 1;
-          } catch (error) {
-            const statusCode =
-              typeof error === "object" && error && "statusCode" in error
-                ? Number(error.statusCode)
-                : undefined;
-            if (statusCode === 404 || statusCode === 410) {
-              staleSubscriptionIds.push(subscriptionRow.id);
-            }
-            failures.push(
-              `${subscriptionRow.id}: ${
-                error instanceof Error ? error.message : "failed"
-              }${statusCode ? ` (${statusCode})` : ""}`,
-            );
+    const deliver = async (userId: string, reminderKey: string, payload: { title: string; body: string; url: string }) => {
+      for (const sub of subscriptionsByUser.get(userId) ?? []) {
+        ensureTime();
+        const token = await claimDeviceReminder(db, userId, sub.id, reminderKey);
+        if (!token) { skipped++; continue; }
+        let sendError: unknown;
+        try {
+          await sendSafePushNotification(sub.subscription, JSON.stringify({ ...payload, tag: reminderKey, icon: "/icon-192.png", badge: "/badge-72.png" }));
+        } catch (error) { sendError = error; }
+        if (sendError) {
+          const status = typeof sendError === "object" && "statusCode" in sendError ? Number(sendError.statusCode) : 0;
+          if (status === 404 || status === 410) {
+            const { error } = await db.from("push_subscriptions").delete().eq("id", sub.id);
+            if (error) throw new Error(`Stale device cleanup failed: ${error.message}`);
+            subscriptionsByUser.set(userId, (subscriptionsByUser.get(userId) ?? []).filter((device) => device.id !== sub.id));
+          } else {
+            await finishDeviceReminder(db, sub.id, reminderKey, token, sendError instanceof Error ? sendError.message : "Push failed");
+            failures.push(`Device ${sub.id}: push failed (${status || "network"}).`);
           }
-        }),
-      );
-
-      if (reminderSent === 0) {
-        await releaseReminder(supabase, snapshot.user_id, reminder.localDate, reminder.deliveryKey);
+        } else {
+          await finishDeviceReminder(db, sub.id, reminderKey, token);
+          sent++;
+        }
+      }
+    };
+    const latestByUser = new Map<string, HealthSnapshotRow>();
+    const userIds = [...subscriptionsByUser.keys()];
+    for (let offset = 0; offset < userIds.length; offset += 500) {
+      ensureTime();
+      const { data, error } = await db.rpc("latest_reminder_snapshots", { p_user_ids: userIds.slice(offset, offset + 500) });
+      if (error) throw new Error(`Latest schedules: ${error.message}`);
+      for (const snapshot of (data ?? []) as HealthSnapshotRow[]) {
+        if (!snapshot.user_id) continue;
+        latestByUser.set(snapshot.user_id, snapshot);
+        checked++;
+        const set = getReminderCandidates(snapshot, now);
+        for (const reminder of getDueRemindersFromCandidates(set.candidates, set.localNow.minutes)) {
+          await deliver(snapshot.user_id, `${reminder.localDate}-${reminder.deliveryKey}`, reminder);
+        }
       }
     }
+    for (let offset = 0; ; offset += SUBSCRIPTION_PAGE_SIZE) {
+      ensureTime();
+      const { data, error } = await db.from("medicines").select("id,user_id,schedule_time,timezone,food_rule").eq("active", true).order("id").range(offset, offset + SUBSCRIPTION_PAGE_SIZE - 1);
+      if (error) throw new Error(`Medicine schedules: ${error.message}`);
+      for (const medicine of (data ?? []) as MedicineScheduleRow[]) {
+        if (!subscriptionsByUser.has(medicine.user_id) || !reminderEnabled(latestByUser.get(medicine.user_id)?.profile?.reminderPreferences, "medicine", "")) continue;
+        let date: string | null;
+        try {
+          date = dueMedicineDate(now, medicine.timezone, medicine.schedule_time, getReminderWindowMinutes());
+        } catch {
+          failures.push(`Medicine ${medicine.id}: invalid schedule; update its timezone.`);
+          continue;
+        }
+        if (!date) continue;
+        const { data: dose, error: doseError } = await db.from("medicine_doses").select("status").eq("medicine_id", medicine.id).eq("scheduled_date", date).maybeSingle();
+        if (doseError) throw new Error(`Medicine dose: ${doseError.message}`);
+        if (dose?.status === "taken" || dose?.status === "skipped") continue;
+        await deliver(medicine.user_id, `${date}-${medicine.id}-medicine`, { title: "Medicine check-in", body: medicine.food_rule === "with_food" ? "Have you had a meal for your medicine? Open your checklist." : "It's time for your scheduled medicine. Open your checklist.", url: "/medicines" });
+      }
+      if ((data?.length ?? 0) < SUBSCRIPTION_PAGE_SIZE) break;
+    }
+    // Persisted snoozes remain available for retries for 30 minutes after due time.
+    const { data: snoozes, error: snoozeError } = await db.from("reminder_snoozes").select("id,user_id,meal_type,due_at").lte("due_at", now.toISOString()).gte("due_at", new Date(now.getTime() - 30 * 60_000).toISOString()).order("due_at").limit(500);
+    if (snoozeError) throw new Error(`Snoozes: ${snoozeError.message}`);
+    for (const snooze of snoozes ?? []) {
+      const snapshot = latestByUser.get(snooze.user_id);
+      if (!reminderEnabled(snapshot?.profile?.reminderPreferences, snooze.meal_type, "")) continue;
+      const localDate = snapshot ? getLocalDateParts(now, snapshot.profile?.timezone || "UTC").date : null;
+      const meal = snapshot?.date === localDate ? snapshot.meals?.find((item) => item.type === snooze.meal_type) : null;
+      if (meal?.status === "logged" || meal?.status === "skipped") continue;
+      await deliver(snooze.user_id, `snooze-${snooze.id}-${snooze.due_at}`, { title: `Your ${snooze.meal_type} check-in`, body: "Tap to log your meal.", url: `/meals?meal=${snooze.meal_type}` });
+    }
+    if (failures.length) throw new Error(`${failures.length} reminder error(s); inspect failures before retrying.`);
+    // Bound operational-history storage; expired reminders are never replayed.
+    const retention = new Date(now.getTime() - 30 * 86400000).toISOString();
+    for (const [table, column] of [["reminder_scheduler_runs", "started_at"], ["device_reminder_deliveries", "updated_at"], ["reminder_snoozes", "due_at"]]) {
+      const { error } = await db.from(table).delete().lt(column, retention);
+      if (error) throw new Error(`Reminder retention: ${error.message}`);
+    }
+    const { error: finishError } = await db.from("reminder_scheduler_runs").update({ status: "complete", finished_at: new Date().toISOString(), accepted: sent }).eq("id", runId);
+    if (finishError) throw new Error(`Scheduler result: ${finishError.message}`);
+    return NextResponse.json({ sent, skipped, failures: [], diagnostics: { now: now.toISOString(), snapshotsChecked: checked, subscribedUsers: subscriptionsByUser.size, reminderWindowMinutes: getReminderWindowMinutes() } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Scheduler failed";
+    await db.from("reminder_scheduler_runs").update({ status: "failed", finished_at: new Date().toISOString(), accepted: sent, error: message.slice(0, 500) }).eq("id", runId);
+    return NextResponse.json({ sent, skipped, error: message, failures: failures.slice(0, 10) }, { status: 503 });
   }
-
-  if (staleSubscriptionIds.length > 0) {
-    await supabase.from("push_subscriptions").delete().in("id", [...new Set(staleSubscriptionIds)]);
-  }
-
-  return NextResponse.json({
-    sent,
-    skipped,
-    failures,
-    diagnostics: {
-      now: now.toISOString(),
-      earliestDate,
-      reminderWindowMinutes,
-      snapshotsFetched: snapshots?.length ?? 0,
-      snapshotsChecked,
-      dueReminders,
-      alreadyDelivered,
-      subscriptionsFound,
-      staleSubscriptionsDeleted: new Set(staleSubscriptionIds).size,
-      scheduleDiagnostics,
-    },
-  });
 }
 
 function getReminderCandidates(snapshot: HealthSnapshotRow, now: Date) {
   const profile = snapshot.profile ?? {};
   const localNow = getLocalDateParts(now, profile.timezone || "UTC");
+  const isMonday = reminderPreferences(profile.reminderPreferences).monday && new Date(`${localNow.date}T12:00:00Z`).getUTCDay() === 1;
   const mealsForToday = snapshot.date === localNow.date ? snapshot.meals : null;
   const dailySnapshot = { ...snapshot, meals: mealsForToday };
 
@@ -269,8 +207,10 @@ function getReminderCandidates(snapshot: HealthSnapshotRow, now: Date) {
       time: profile.wakeTime ?? "",
       deliveryKey: `morning-${profile.wakeTime ?? ""}`,
       localDate: localNow.date,
-      title: "Good morning, sweetheart",
-      body: getMorningQuoteText(snapshot.quote_index ?? 0),
+      title: isMonday ? "Monday health check-in" : "Good morning",
+      body: isMonday
+        ? "Please be healthy. I'm here to help you out."
+        : getMorningQuoteText(snapshot.quote_index ?? 0),
       url: "/morning",
       sendUntilMinutes: getSegmentEndMinutes(profile.wakeTime, profile.breakfastTime),
     },
@@ -287,7 +227,7 @@ function getReminderCandidates(snapshot: HealthSnapshotRow, now: Date) {
     },
   ];
 
-  return { localNow, candidates };
+  return { localNow, candidates: candidates.filter(reminder => reminderEnabled(profile.reminderPreferences, reminder.kind, localNow.date)) };
 }
 
 function getDueRemindersFromCandidates(
@@ -308,23 +248,23 @@ function getMealReminderCandidates(
 ): ReminderCandidate[] {
   const mealCopy: Record<MealType, { title: string; body: string }> = {
     breakfast: {
-      title: "You are late for breakfast",
-      body: "Tap to log breakfast and your water from morning.",
+      title: "Breakfast check-in",
+      body: "A moment for breakfast? Tap to check in.",
     },
     lunch: {
-      title: "You are late for lunch",
-      body: "Tap to capture your lunch and check in.",
+      title: "Lunch check-in",
+      body: "Ready for lunch? Tap to check in.",
     },
     dinner: {
-      title: "You are late for dinner",
-      body: "Tap to log dinner and finish strong.",
+      title: "Dinner check-in",
+      body: "A moment for dinner? Tap to check in.",
     },
   };
 
   return (["breakfast", "lunch", "dinner"] as MealType[])
     .map((type) => {
       const meal = snapshot.meals?.find((item) => item.type === type);
-      const time = meal?.plannedTime ?? profile[`${type}Time` as keyof typeof profile] ?? "";
+      const time = meal?.plannedTime ?? profile[`${type}Time` as "breakfastTime" | "lunchTime" | "dinnerTime"] ?? "";
 
       return {
         kind: type,
@@ -333,12 +273,13 @@ function getMealReminderCandidates(
         localDate,
         title: mealCopy[type].title,
         body: mealCopy[type].body,
-        url: "/meal/lunch",
+        url: `/meals?meal=${type}`,
         status: meal?.status,
         sendUntilMinutes: getMealSegmentEndMinutes(type, profile, time),
       };
     })
-    .filter((reminder) => reminder.status !== "logged" && reminder.status !== "skipped");
+    // Persisted snoozes have their own delivery key and retry window.
+    .filter((reminder) => reminder.status !== "logged" && reminder.status !== "skipped" && reminder.status !== "snoozed");
 }
 
 function isWithinCronWindow(
@@ -388,7 +329,7 @@ function getReminderTiming(
 function getReminderWindowMinutes() {
   const value = Number(process.env.REMINDER_WINDOW_MINUTES ?? DEFAULT_REMINDER_WINDOW_MINUTES);
   if (!Number.isFinite(value)) return DEFAULT_REMINDER_WINDOW_MINUTES;
-  return Math.max(MIN_REMINDER_WINDOW_MINUTES, value);
+  return Math.min(180, Math.max(MIN_REMINDER_WINDOW_MINUTES, value));
 }
 
 function getMealSegmentEndMinutes(
@@ -429,7 +370,7 @@ function getLocalDateParts(date: Date, timezone: string) {
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
+      hourCycle: "h23",
     }).formatToParts(date);
   } catch {
     resolvedTimezone = "UTC";
@@ -440,7 +381,7 @@ function getLocalDateParts(date: Date, timezone: string) {
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
+      hourCycle: "h23",
     }).formatToParts(date);
   }
 
@@ -454,45 +395,4 @@ function getLocalDateParts(date: Date, timezone: string) {
     timezone: resolvedTimezone,
     minutes: hour * 60 + minute,
   };
-}
-
-async function reserveReminder(
-  supabase: SupabaseClient,
-  userId: string,
-  date: string,
-  kind: ReminderKind,
-  deliveryKey: string,
-) {
-  const { error } = await supabase.from("reminder_deliveries").insert({
-    user_id: userId,
-    date,
-    kind,
-    reminder_key: deliveryKey,
-  });
-
-  if (error && error.message.toLowerCase().includes("reminder_key")) {
-    const { error: fallbackError } = await supabase.from("reminder_deliveries").insert({
-      user_id: userId,
-      date,
-      kind,
-    });
-
-    return !fallbackError;
-  }
-
-  return !error;
-}
-
-async function releaseReminder(
-  supabase: SupabaseClient,
-  userId: string,
-  date: string,
-  deliveryKey: string,
-) {
-  await supabase
-    .from("reminder_deliveries")
-    .delete()
-    .eq("user_id", userId)
-    .eq("date", date)
-    .eq("reminder_key", deliveryKey);
 }

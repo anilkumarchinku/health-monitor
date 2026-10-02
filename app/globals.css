@@ -123,4 +123,81 @@
   .pill-nav {
     @apply rounded-full bg-primary text-primary-foreground shadow-soft;
   }
+
+  .medicine-guide-enter {
+    animation: medicine-guide-enter 480ms ease-out both;
+  }
+
+  .medicine-orbit {
+    animation: medicine-orbit 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes medicine-guide-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes medicine-orbit {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .medicine-guide-enter, .medicine-orbit { animation: none; }
+}
+
+/* Calm surfaces, tactile controls, and brief opt-out motion. */
+body { background: #faf7f2; }
+body::before { content: none; }
+.app-header { position: sticky; top: 0; z-index: 40; background: #faf7f2; box-shadow: 0 1px 0 #deded5; }
+.bottom-navigation { position: fixed; z-index: 50; bottom: 0; left: 0; right: 0; padding: 10px 8px calc(10px + env(safe-area-inset-bottom)); background: #fcfaf7; border-top: 1px solid #deded5; box-shadow: 0 -3px 18px #324b3810; }
+.bottom-navigation a { display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 48px; justify-content: center; color: #656960; font-size: 11px; font-weight: 600; }
+.bottom-navigation a.active { color: #315e43; }
+.bottom-navigation a.active svg { stroke-width: 2.7; }
+.icon-button { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border-radius: 12px; }
+.icon-button:hover { background: #e8eddf; }
+.account-menu { position: absolute; right: 0; top: 52px; width: 240px; padding: 8px; border-radius: 16px; border: 1px solid #ccd3c7; background: #fffdfa; box-shadow: 3px 4px 0 #263e2c; }
+.account-menu a, .account-menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 12px; text-align: left; font-size: 14px; border-radius: 10px; }
+.account-menu a:hover, .account-menu button:hover { background: #e8eddf; }
+.health-page { min-height: 100dvh; padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+.health-content { width: 100%; max-width: 680px; margin: 0 auto; padding: 20px 20px 30px; }
+.health-heading { font-size: clamp(28px, 5.5vw, 34px); line-height: 1.18; letter-spacing: -.035em; font-weight: 750; text-wrap: balance; }
+.health-description { color: #60675d; line-height: 1.6; margin-top: 8px; }
+.next-action { background: #e8eee2; border: 1px solid #ccd7c5; border-radius: 18px; padding: 20px; box-shadow: 6px 6px 16px #253b2520, -5px -5px 14px #fff, inset 2px 2px 1px #ffffffba; }
+.neo-icon { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: #f0eade; color: #315e43; box-shadow: 3px 3px 7px #534c3620, -3px -3px 7px #fff, inset 1px 1px 2px #fff; }
+.neo-icon.sage { background: #e6eddf; }
+.neo-icon.peach { background: #f9e8d9; }
+.neo-primary, .neo-secondary { min-height: 48px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 11px 18px; border: 1.5px solid #203c2a; border-radius: 12px; font-weight: 650; box-shadow: 2px 3px 0 #203c2a; transition: transform 140ms, box-shadow 140ms; }
+.neo-primary { background: #27583f; color: #fff; }
+.neo-secondary { background: #fafaf3; color: #29523a; }
+.neo-primary:hover { background: #2c573d; }
+.neo-secondary:hover { background: #e6eddf; }
+.neo-primary:active, .neo-secondary:active { transform: translate(2px, 2px); box-shadow: 0 0 0 #203c2a; }
+.neo-primary:disabled, .neo-secondary:disabled { opacity: .55; cursor: not-allowed; }
+.health-row { display: flex; align-items: center; gap: 14px; padding: 22px 0; border-bottom: 1px solid #deded5; }
+.health-row small { display: block; margin-top: 4px; color: #60675d; font-size: 14px; line-height: 1.45; }
+.health-panel { border: 1px solid #d4dbce; border-radius: 18px; padding: 22px; background: #fffdf8; }
+.health-form { display: grid; gap: 20px; }
+.health-form label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
+.health-form input, .health-form textarea, .health-form select { width: 100%; min-height: 48px; border: 1px solid #aebaa6; border-radius: 12px; background: #fffefb; padding: 12px; color: #25382c; font-size: 16px; font-weight: 400; }
+.health-form textarea { min-height: 100px; }
+.health-segments { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0; }
+.health-segments button { flex: 1; min-height: 44px; border-radius: 12px; border: 1px solid #bdc8b7; padding: 10px 12px; font-size: 14px; font-weight: 600; }
+.health-segments button[aria-pressed="true"] { background: #315e43; color: white; border-color: #315e43; }
+.health-notice { padding: 14px 16px; border-radius: 12px; border: 1px solid #c3d0b7; background: #eef2e8; font-size: 14px; line-height: 1.5; }
+.health-error { border-color: #d3a69e; background: #fff0ea; color: #842d20; }
+.health-flip { animation: health-flip-in 240ms ease-out both; transform-origin: center top; }
+@keyframes health-flip-in { from { opacity: .25; transform: perspective(900px) rotateX(-8deg) translateY(5px); } to { opacity: 1; transform: none; } }
+button, a, input, textarea, select, summary { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid #4b784e; outline-offset: 4px; }
+.glass-shell { border: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.glass-surface, .wellness-card { background: #fffdf8; border: 1px solid #d4dbce; box-shadow: none; backdrop-filter: none; }
+main { scroll-padding-bottom: 110px; }
+@media (max-width: 767px) { main { padding-bottom: calc(104px + env(safe-area-inset-bottom)) !important; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .health-flip, .medicine-orbit { animation: none; transform: none; }
+  button:hover .lucide, a:hover .lucide, [role="tab"]:hover .lucide { transform: none; }
 }

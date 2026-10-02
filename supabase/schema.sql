@@ -100,3 +100,8 @@ create policy "Users can read their own reminder deliveries"
   for select
   to authenticated
   using (user_id = auth.uid());
+
+-- API handlers enforce validation and atomic ownership/version checks.
+revoke all on public.health_snapshots, public.push_subscriptions from anon, authenticated;
+grant select on public.health_snapshots, public.push_subscriptions to authenticated;
+grant select, insert, update, delete on public.health_snapshots, public.push_subscriptions to service_role;

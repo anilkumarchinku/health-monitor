@@ -15,7 +15,7 @@ const eslintConfig = [
     ignores: [".gitnexus/**", ".next/**", "next-env.d.ts", "out/**"],
   },
   {
-    files: ["tailwind.config.ts"],
+    files: ["tailwind.config.ts", "tests/**/*.cjs"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },

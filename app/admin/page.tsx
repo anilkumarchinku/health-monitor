@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
+import { MealImage } from "@/components/meal-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,58 +111,53 @@ function dayStats(day: DaySummary) {
 }
 
 export default function AdminPage() {
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [imageWarning, setImageWarning] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    let cancelled = false;
     async function loadUsers() {
-      const user = await requireSignedInUser();
-      if (!user) return;
-
-      const remoteDays = await loadAdminSnapshots();
-      const remoteUsers = remoteDays.reduce<Record<string, DaySummary[]>>((acc, day) => {
-        const id = day.clientId ?? "supabase-user";
-        acc[id] = [...(acc[id] ?? []), day];
-        return acc;
-      }, {});
-
-      const adminUsers = Object.entries(remoteUsers).map(([id, days]) => ({
-        id,
-        name: days[0]?.profile?.name || "Supabase user",
-        days: days
-          .slice()
-          .sort((a, b) => b.date.localeCompare(a.date)),
-      }));
-
-      setUsers(adminUsers);
-      setExpandedUsers(
-        adminUsers.reduce<Record<string, boolean>>((acc, user, index) => {
-          acc[user.id] = index === 0;
+      setLoading(true);
+      setError(null);
+      setUsers([]);
+      try {
+        const user = await requireSignedInUser();
+        if (!user) throw new Error("Sign in to open admin monitoring.");
+        const result = await loadAdminSnapshots(page);
+        if (cancelled) return;
+        const grouped = result.snapshots.reduce<Record<string, DaySummary[]>>((acc, day) => {
+          const id = day.clientId ?? "supabase-user";
+          (acc[id] ??= []).push(day);
           return acc;
-        }, {}),
-      );
-      setExpandedDays(
-        adminUsers.reduce<Record<string, boolean>>((acc, user) => {
-          user.days.forEach((day, index) => {
-            acc[`${user.id}-${day.date}`] = index === 0;
-          });
-          return acc;
-        }, {}),
-      );
-      setExpandedMeals(
-        adminUsers.reduce<Record<string, boolean>>((acc, user) => {
-          user.days.forEach((day, index) => {
-            acc[`${user.id}-${day.date}-meals`] = index === 0;
-          });
-          return acc;
-        }, {}),
-      );
+        }, {});
+        const adminUsers = Object.entries(grouped).map(([id, days]) => ({
+          id, name: days[0]?.profile?.name || "User", days: days.sort((a, b) => b.date.localeCompare(a.date)),
+        }));
+        setUsers(adminUsers);
+        setTotal(result.total);
+        setHasMore(result.hasMore);
+        setImageWarning(result.imageWarning ?? null);
+        setExpandedUsers(Object.fromEntries(adminUsers.map((user, index) => [user.id, index === 0])));
+        setExpandedDays(Object.fromEntries(adminUsers.flatMap((user) => user.days.map((day, index) => [`${user.id}-${day.date}`, index === 0]))));
+        setExpandedMeals(Object.fromEntries(adminUsers.flatMap((user) => user.days.map((day, index) => [`${user.id}-${day.date}-meals`, index === 0]))));
+      } catch (failure) {
+        if (!cancelled) setError(failure instanceof Error ? failure.message : "Unable to load monitoring data.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-
     void loadUsers();
-  }, []);
+    return () => { cancelled = true; };
+  }, [page, refresh]);
 
   const monitorStats = useMemo(() => {
     const allDays = users.flatMap((user) => user.days);
@@ -209,28 +205,43 @@ export default function AdminPage() {
                 </h1>
               </div>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/">
-                <ArrowLeft />
-                Dashboard
-              </Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <Link href="/admin/email">Announcement email</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/">
+                  <ArrowLeft />
+                  Dashboard
+                </Link>
+              </Button>
+            </div>
           </div>
 
+          <p className="text-sm text-muted-foreground">Metrics below cover only the snapshots on this page. A user’s history may continue on another page.</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric icon={<Users className="h-4 w-4" />} label="Users" value={`${monitorStats.users}`} dark />
-            <Metric icon={<Sparkles className="h-4 w-4" />} label="Tracked days" value={`${monitorStats.days}`} />
-            <Metric icon={<Camera className="h-4 w-4" />} label="Meal images" value={`${monitorStats.mealImages}`} />
-            <Metric icon={<Shield className="h-4 w-4" />} label="Avg score" value={`${monitorStats.averageScore}/100`} dark />
+            <Metric icon={<Users className="h-4 w-4" />} label="Users on page" value={`${monitorStats.users}`} dark />
+            <Metric icon={<Sparkles className="h-4 w-4" />} label="Days on page" value={`${monitorStats.days}`} />
+            <Metric icon={<Camera className="h-4 w-4" />} label="Images on page" value={`${monitorStats.mealImages}`} />
+            <Metric icon={<Shield className="h-4 w-4" />} label="Page avg score" value={`${monitorStats.averageScore}/100`} dark />
           </div>
         </div>
       </section>
 
       <div className="glass-shell mx-auto mt-5 w-full max-w-7xl space-y-4 rounded-lg p-3 sm:p-5">
-        {users.length === 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3" aria-label="Snapshot pages">
+          <p className="text-sm" aria-live="polite">{loading ? "Loading snapshots…" : error ? "Monitoring data unavailable" : `Page ${page} · ${total} total snapshots`}</p>
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={loading || page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</Button>
+            <Button variant="outline" disabled={loading || Boolean(error) || !hasMore} onClick={() => setPage((value) => value + 1)}>Next</Button>
+            <Button variant="outline" disabled={loading} onClick={() => setRefresh((value) => value + 1)}>Refresh</Button>
+          </div>
+        </div>
+        {imageWarning && !loading && !error && <p role="status" className="text-sm text-amber-800">{imageWarning}</p>}
+        {loading ? <p role="status">Loading health records…</p> : error ? <p role="alert" className="text-sm text-red-700">{error} Use Refresh to try again.</p> : users.length === 0 ? (
           <Card>
             <CardHeader>
-              <CardTitle>No users to monitor yet</CardTitle>
+              <CardTitle>No snapshots on this page</CardTitle>
               <CardDescription>
                 Complete onboarding and log meals first. Admin monitoring reads stored app data.
               </CardDescription>
@@ -330,9 +341,8 @@ export default function AdminPage() {
                                           </Badge>
                                         </div>
                                         {meal.image ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img
-                                            src={meal.image}
+                                          <MealImage
+                                            image={meal.image}
                                             alt={`${mealLabels[meal.type]} meal`}
                                             className="aspect-[4/3] w-full rounded-md object-cover"
                                           />
@@ -394,25 +404,24 @@ export default function AdminPage() {
   );
 }
 
-async function loadAdminSnapshots() {
+async function loadAdminSnapshots(page: number) {
   const supabase = createSupabaseBrowserClient();
-  if (!supabase) return [];
+  if (!supabase) throw new Error("Supabase is not configured.");
 
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (!session) return [];
+  if (!session) throw new Error("Sign in to open admin monitoring.");
 
-  const response = await fetch("/api/admin/snapshots", {
+  const response = await fetch(`/api/admin/snapshots?page=${page}&pageSize=50`, {
     headers: {
       Authorization: `Bearer ${session.access_token}`,
     },
   });
 
-  if (!response.ok) return [];
-  const data = (await response.json()) as { snapshots?: DaySummary[] };
-
-  return data.snapshots ?? [];
+  const data = await response.json() as { snapshots: DaySummary[]; total: number; hasMore: boolean; imageWarning?: string | null; error?: string };
+  if (!response.ok) throw new Error(data.error || "Unable to load monitoring data.");
+  return data;
 }
 
 function Metric({
