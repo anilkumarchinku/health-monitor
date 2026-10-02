@@ -24,6 +24,10 @@ The local production build passed the checks below. This is not a guarantee of l
 - GitNexus application and test analyses were split using temporary Git indexes to avoid the tool's 1,000-symbol output cap. Both completed without partial or truncated results. Application risk remains critical because shared authentication, sync and scheduling flows change; focused backend/frontend reviews and regression tests cover these areas.
 - Temporary QA accounts and associated records/counters were removed.
 
+## Clean installation follow-up
+
+The first GitHub Actions run exposed two missing optional WebAssembly dependencies in the npm lockfile. Regenerated the lockfile using npm 10 in a clean temporary directory; only `@emnapi/core` and `@emnapi/runtime` package records were added, with no existing package version changes. A clean `npm ci --ignore-scripts` then installed all 435 packages successfully. The follow-up commit triggers the full Linux CI checks and a fresh Vercel deployment.
+
 ## Remaining production checks
 
 - Verify the exact pushed commit finishes deploying on Vercel.
