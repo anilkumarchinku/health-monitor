@@ -1,444 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  Bell,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Droplets,
-  Moon,
-  Sparkles,
-  Sun,
-  Utensils,
-} from "lucide-react";
-import { HealthSyncStatus } from "@/components/sync-status";
-import { AppNav } from "@/components/app-nav";
+import { useEffect, useRef, type KeyboardEvent, type TouchEvent } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { requireSignedInUser } from "@/lib/auth";
-import { getBrowserTimezone, prepareLocalUserSession, saveHealthStateWithHistory, validateHealthProfile } from "@/lib/health-sync";
-import { signInDestination } from "@/lib/return-path";
-import { enablePushNotifications } from "@/lib/push-notifications";
-
-type MealType = "breakfast" | "lunch" | "dinner";
-
-type Profile = {
-  name: string;
-  wakeTime: string;
-  breakfastTime: string;
-  lunchTime: string;
-  dinnerTime: string;
-  sleepReminder: string;
-  waterGoal: number;
-  primaryGoal: string;
-  timezone: string;
-};
-
-type MealLog = {
-  type: MealType;
-  plannedTime: string;
-  actualTime: string;
-  description: string;
-  image: string;
-  hunger: number;
-  fullness: number;
-  notes: string;
-  status: "pending" | "logged" | "snoozed" | "skipped";
-};
-
-const defaultProfile: Profile = {
-  name: "",
-  wakeTime: "07:00",
-  breakfastTime: "08:30",
-  lunchTime: "13:00",
-  dinnerTime: "20:00",
-  sleepReminder: "22:30",
-  waterGoal: 2500,
-  primaryGoal: "More energy",
-  timezone: getBrowserTimezone(),
-};
-
-const goals = ["More energy", "Better sleep", "Balanced meals", "More discipline"];
-const steps = ["You", "Routine", "Goals", "Reminders"];
-
-function createMeals(profile: Profile): MealLog[] {
-  return [
-    createMeal("breakfast", profile.breakfastTime),
-    createMeal("lunch", profile.lunchTime),
-    createMeal("dinner", profile.dinnerTime),
-  ];
-}
-
-function createMeal(type: MealType, time: string): MealLog {
-  return {
-    type,
-    plannedTime: time,
-    actualTime: time,
-    description: "",
-    image: "",
-    hunger: 3,
-    fullness: 3,
-    notes: "",
-    status: "pending",
-  };
-}
+import { OnboardingShell } from "@/components/onboarding/onboarding-shell";
+import { NavigationControls, OnboardingComplete, OnboardingQuestion } from "@/components/onboarding/onboarding-question";
+import { OnboardingMotionScene } from "@/components/onboarding/onboarding-motion-scene";
+import { useOnboarding } from "@/components/onboarding/use-onboarding";
+import { onboardingKeyAction } from "@/lib/onboarding";
+import styles from "@/components/onboarding/onboarding.module.css";
 
 export default function OnboardingPage() {
-  const [step, setStep] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [profile, setProfile] = useState<Profile>(defaultProfile);
-  const [notificationChoice, setNotificationChoice] = useState<"later" | "enabled" | "unset">("unset");
-  const [notificationHelp, setNotificationHelp] = useState("");
-
-  useEffect(() => {
-    async function boot() {
-      const user = await requireSignedInUser();
-      if (user) prepareLocalUserSession(user.id);
-    }
-
-    void boot();
-    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (detectedTimezone) {
-      updateProfile("timezone", detectedTimezone);
-    }
-  }, []);
-
-  const progress = Math.round(((step + 1) / 4) * 100);
-  const currentStepComplete =
-    (step === 3 && notificationChoice !== "unset") ||
-    (step === 0 && profile.name.trim().length > 0 && profile.primaryGoal.length > 0) ||
-    (step === 1 &&
-      Boolean(profile.breakfastTime) &&
-      Boolean(profile.lunchTime) &&
-      Boolean(profile.dinnerTime)) ||
-    (step === 2 &&
-      Boolean(profile.wakeTime) &&
-      Boolean(profile.sleepReminder) &&
-      profile.waterGoal >= 500);
-
-  function updateProfile<K extends keyof Profile>(key: K, value: Profile[K]) {
-    setProfile((current) => ({ ...current, [key]: value }));
-  }
-
-  async function requestNotifications() {
-    const result = await enablePushNotifications();
-    setNotificationChoice(result === "enabled" ? "enabled" : "later");
-    if (result === "ios-install-required") {
-      setNotificationHelp("On iPhone, open Safari, tap Share, Add to Home Screen, then open Health Monitor from the icon and enable notifications there.");
-    } else {
-      setNotificationHelp("");
-    }
-  }
-
-  async function finishOnboarding() {
-    if (saving || !currentStepComplete) return;
-    const error = validateHealthProfile({ ...profile, name: profile.name.trim() || "Sweetheart" });
-    if (error) { setNotificationHelp(error); return; }
-    const completedProfile = {
-      ...profile,
-      name: profile.name.trim() || "Sweetheart",
-    };
-
-    const appState = {
-      onboardingCompleted: true,
-      profile: completedProfile,
-      meals: createMeals(completedProfile),
-      water: 0,
-      sleep: {
-        sleptAt: "",
-        wokeAt: completedProfile.wakeTime,
-        hours: 0,
-        minutes: 0,
-        quality: "Okay",
-      },
-      sleepCheckCompleted: false,
-      quoteIndex: 0,
-      quoteFeedback: null,
-      notificationPreference: notificationChoice,
-    };
-
-    setSaving(true);
-    const synced = await saveHealthStateWithHistory(appState).catch(() => false);
-    setSaving(false);
-    if (!synced) { setNotificationHelp("Setup is saved on this device, but cloud sync failed. Retry to finish setup."); return; }
-    window.location.href = signInDestination();
-  }
-
-  return (
-    <main className="min-h-screen px-4 py-5 sm:px-6">
-      <AppNav title="Set up your companion" />
-      <HealthSyncStatus />
-      <div className="glass-shell mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-2xl flex-col gap-5 rounded-lg p-4 sm:p-6">
-        <header className="py-4"><h1 className="health-heading">Make it your routine</h1><p className="health-description">A few details, then you&apos;re ready.</p><ol className="mt-6 flex flex-wrap gap-2" aria-label="Setup steps">{steps.map((label, index) => <li key={label} aria-current={index === step ? "step" : undefined} className={`rounded-xl px-3 py-2 text-sm ${index === step ? "bg-primary text-white" : "text-muted-foreground"}`}>{index + 1}. {label}</li>)}</ol></header>
-
-        <section className="flex flex-col justify-between gap-6">
-          <div className="glass-surface rounded-lg p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium">Step {step + 1} of 4</p>
-              <p className="text-sm text-muted-foreground">{progress}%</p>
-            </div>
-            <Progress value={progress} />
-          </div>
-
-          <Card className="health-flip" key={step}>
-            {step === 3 && (
-              <>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <Bell className="h-6 w-6 text-primary" />
-                    Would you like reminders?
-                  </CardTitle>
-                  <CardDescription>
-                    Get gentle reminders for your routine. You can change your choice later in Settings.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={requestNotifications}
-                    className={`rounded-lg border p-5 text-left backdrop-blur-xl transition ${
-                      notificationChoice === "enabled"
-                        ? "border-primary bg-primary/10"
-                        : "bg-white/55 hover:border-primary"
-                    }`}
-                  >
-                    <Bell className="mb-4 h-6 w-6" />
-                    <p className="font-semibold">Enable notifications</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      iPhone users must open this from the Home Screen app before iOS shows permission.
-                    </p>
-                    {notificationHelp && (
-                      <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
-                        {notificationHelp}
-                      </p>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNotificationChoice("later")}
-                    className={`rounded-lg border p-5 text-left backdrop-blur-xl transition ${
-                      notificationChoice === "later"
-                        ? "border-primary bg-primary/10"
-                        : "bg-white/55 hover:border-primary"
-                    }`}
-                  >
-                    <Sparkles className="mb-4 h-6 w-6" />
-                    <p className="font-semibold">Maybe later</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      In-app reminders will still appear on the dashboard.
-                    </p>
-                  </button>
-                </CardContent>
-              </>
-            )}
-
-            {step === 0 && (
-              <>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <Sun className="h-6 w-6 text-amber-600" />
-                    What should we call you?
-                  </CardTitle>
-                  <CardDescription>
-                    This name appears in morning messages and check-ins.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name or nickname</Label>
-                    <Input
-                      id="name"
-                      value={profile.name}
-                      placeholder="Example: Anil"
-                      onChange={(event) => updateProfile("name", event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Primary goal</Label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {goals.map((goal) => (
-                        <Button
-                          key={goal}
-                          variant={profile.primaryGoal === goal ? "default" : "outline"}
-                          onClick={() => updateProfile("primaryGoal", goal)}
-                        >
-                          {goal}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </>
-            )}
-
-            {step === 1 && (
-              <>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <Utensils className="h-6 w-6 text-primary" />
-                    When do you usually eat?
-                  </CardTitle>
-                  <CardDescription>
-                    These times drive breakfast, lunch, and dinner notifications.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-3">
-                  <TimeField
-                    id="breakfast"
-                    label="Breakfast"
-                    value={profile.breakfastTime}
-                    onChange={(value) => updateProfile("breakfastTime", value)}
-                  />
-                  <TimeField
-                    id="lunch"
-                    label="Lunch"
-                    value={profile.lunchTime}
-                    onChange={(value) => updateProfile("lunchTime", value)}
-                  />
-                  <TimeField
-                    id="dinner"
-                    label="Dinner"
-                    value={profile.dinnerTime}
-                    onChange={(value) => updateProfile("dinnerTime", value)}
-                  />
-                  <div className="space-y-2 sm:col-span-3">
-                    <Label htmlFor="timezone">Timezone</Label>
-                    <Input
-                      id="timezone"
-                      value={profile.timezone}
-                      onChange={(event) => updateProfile("timezone", event.target.value)}
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Meal reminders use this timezone, so lunch at 1:00 PM means your local 1:00 PM.
-                    </p>
-                  </div>
-                </CardContent>
-              </>
-            )}
-
-            {step === 2 && (
-              <>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <Moon className="h-6 w-6 text-indigo-700" />
-                    Sleep and water basics
-                  </CardTitle>
-                  <CardDescription>
-                    We use this for morning check-ins and daily hydration progress.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-3">
-                  <TimeField
-                    id="wake"
-                    label="Wake time"
-                    value={profile.wakeTime}
-                    onChange={(value) => updateProfile("wakeTime", value)}
-                  />
-                  <TimeField
-                    id="sleep"
-                    label="Sleep reminder"
-                    value={profile.sleepReminder}
-                    onChange={(value) => updateProfile("sleepReminder", value)}
-                  />
-                  <div className="space-y-2">
-                    <Label htmlFor="water">Daily water goal</Label>
-                    <div className="grid grid-cols-[44px_1fr_44px] gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() =>
-                          updateProfile("waterGoal", Math.max(500, profile.waterGoal - 100))
-                        }
-                      >
-                        <Droplets className="h-4 w-4" />
-                      </Button>
-                      <Input
-                        id="water"
-                        type="number"
-                        min={500}
-                        step={100}
-                        value={profile.waterGoal}
-                        onChange={(event) =>
-                          updateProfile("waterGoal", Number(event.target.value))
-                        }
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() =>
-                          updateProfile("waterGoal", Math.min(6000, profile.waterGoal + 100))
-                        }
-                      >
-                        <Droplets className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </>
-            )}
-
-            <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                {currentStepComplete ? "Looks good. You can continue." : "Fill the current details to continue."}
-              </p>
-              <div className="flex w-full justify-between gap-3 sm:w-auto">
-              <Button
-                variant="outline"
-                disabled={step === 0}
-                onClick={() => setStep((current) => Math.max(0, current - 1))}
-              >
-                <ChevronLeft />
-                Back
-              </Button>
-              {step < 3 ? (
-                <Button
-                  disabled={!currentStepComplete}
-                  onClick={() => setStep((current) => Math.min(3, current + 1))}
-                >
-                  Next
-                  <ChevronRight />
-                </Button>
-              ) : (
-                <Button disabled={saving || !currentStepComplete} onClick={finishOnboarding}>
-                  {saving ? "Saving…" : "Finish setup"}
-                  <Check />
-                </Button>
-              )}
-              </div>
-            </CardFooter>
-          </Card>
+  const flow = useOnboarding();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => { if (flow.ready && flow.phase !== "out") heading.current?.focus({ preventScroll: true }); }, [flow.ready, flow.state.step, flow.phase]);
+  const transitioning = flow.phase !== "idle";
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing || transitioning || flow.saving) return;
+    const element = event.target as HTMLElement;
+    const editable = Boolean(element.closest('input, textarea, select, [contenteditable="true"]'));
+    // Preserve native Enter/Space activation for the focused button or link.
+    if (event.key === "Enter" && element.closest("button, a")) return;
+    const action = onboardingKeyAction(event.key, editable, event.repeat);
+    if (action?.type === "choose") { const option = flow.step?.options?.[action.index]; if (option) { event.preventDefault(); flow.select(option.value); } }
+    if (action?.type === "continue" && flow.step) { event.preventDefault(); flow.next(); }
+    // Completion always requires an explicit click/keyboard activation of its CTA.
+  };
+  const startSwipe = (event: TouchEvent) => {
+    if ((event.target as HTMLElement).closest("button, input, textarea, a") || event.touches.length !== 1) { touchStart.current = null; return; }
+    touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  };
+  const finishSwipe = (event: TouchEvent) => {
+    const start = touchStart.current; touchStart.current = null;
+    if (!start || !event.changedTouches[0] || transitioning || flow.saving) return;
+    const dx = event.changedTouches[0].clientX - start.x, dy = event.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2) return;
+    if (dx > 0) flow.back(); else if (flow.step) flow.next();
+  };
+  return <OnboardingShell step={flow.state.step} editing={flow.editing} scene={<OnboardingMotionScene step={flow.state.step} />}>
+    <main className={styles.main} onKeyDown={onKeyDown} onTouchStart={startSwipe} onTouchEnd={finishSwipe}>
+      {!flow.ready ? <div className={styles.loading}><h1 className="health-heading">Let&apos;s make it yours.</h1>{flow.error ? <><p role="alert">{flow.error}</p><Button onClick={() => void flow.reload()}>Try again</Button></> : <p role="status">Loading your preferences…</p>}</div> : <>
+        <section className={styles.stage} data-phase={flow.phase} aria-labelledby="onboarding-question" aria-busy={transitioning || flow.saving}>
+          {flow.step ? <OnboardingQuestion step={flow.step} answer={flow.answer} headingRef={heading} disabled={transitioning || flow.saving} onSelect={flow.select} onText={flow.setText} /> : <OnboardingComplete headingRef={heading} editing={flow.editing} />}
         </section>
-      </div>
+        {flow.error && <p role="alert" className={styles.error}>{flow.error}</p>}
+        <NavigationControls step={flow.state.step} complete={!flow.step} disabled={transitioning} saving={flow.saving} canContinue={flow.canContinue} editing={flow.editing} onBack={flow.back} onNext={flow.next} onFinish={() => void flow.finish()} />
+        <p className="sr-only" aria-live="polite">{flow.saving ? "Saving your preferences." : flow.step?.type === "single-select" ? "Choosing an option continues automatically. Choose Other to add optional text. You can go back at any time." : ""}</p>
+      </>}
     </main>
-  );
-}
-
-function TimeField({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} type="time" value={value} onChange={(event) => onChange(event.target.value)} />
-    </div>
-  );
+  </OnboardingShell>;
 }
